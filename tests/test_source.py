@@ -79,15 +79,16 @@ class SourceTests(unittest.TestCase):
         self.assertIn("static void IBNUpdateChargingTransition(void)", TWEAK)
         self.assertIn("static BOOL IBNChargingIntermission = NO;", TWEAK)
         self.assertIn("(int64_t)(3.0 * NSEC_PER_SEC)", TWEAK)
-        self.assertNotIn("(int64_t)(2.0 * NSEC_PER_SEC)", TWEAK)
+        # A separate two-second blackout applies only after recording stops.
+        self.assertIn("(int64_t)(2.0 * NSEC_PER_SEC)", TWEAK)
         self.assertNotIn("(int64_t)(4.0 * NSEC_PER_SEC)", TWEAK)
         self.assertIn("if (connected == IBNPowerConnected) return;", TWEAK)
         self.assertIn("NSUInteger token = ++IBNPowerTransitionToken;", TWEAK)
         self.assertIn("if (token != IBNPowerTransitionToken || !IBNPowerConnected) return;", TWEAK)
         self.assertIn("if (IBNPowerConnected && !IBNChargingIntermission)", TWEAK)
-        self.assertIn("layer.hidden = (percent == 0 || IBNChargingIntermission);", TWEAK)
-        self.assertIn("IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;", TWEAK)
-        self.assertIn("IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;", TWEAK)
+        self.assertIn("layer.hidden = (percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission);", TWEAK)
+        self.assertIn("IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission;", TWEAK)
+        self.assertIn("IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission;", TWEAK)
         self.assertIn("IBNApplyNativeBorderState();", TWEAK)
         # Stock keyline can reappear during the three-second native popup.
         self.assertIn("IBNEnabled && !IBNChargingIntermission", TWEAK)
@@ -173,14 +174,14 @@ class SourceTests(unittest.TestCase):
         self.assertNotIn('bundleWithPath:@"/System/Library/ControlCenter/Bundles/ReplayKitModule.bundle"', TWEAK)
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
 
-    def test_cancel_countdown_and_one_second_stop(self):
+    def test_cancel_countdown_and_two_second_stop_blackout(self):
         # Cancelled countdown cannot leave expanded border forever.
         self.assertIn('(int64_t)(6.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('if (token != IBNCountdownToken || UIScreen.mainScreen.isCaptured) return;', TWEAK)
         self.assertIn('IBNCountdownExpanded = NO;', TWEAK)
         self.assertIn('++IBNCountdownToken;', TWEAK)
-        # Normal stop: same 1-second return as before.
-        self.assertIn('(int64_t)(1.0 * NSEC_PER_SEC)', TWEAK)
+        # Normal stop: arcs disappear immediately and return after 2 seconds.
+        self.assertIn('(int64_t)(2.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)  # unchanged charging pause
 
     def test_screen_recording_uses_two_phases(self):
