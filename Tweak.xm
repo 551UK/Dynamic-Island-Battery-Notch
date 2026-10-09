@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.4 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.5 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -8,6 +8,7 @@
 #import <sys/utsname.h>
 #import <string.h>
 #import <objc/runtime.h>
+#import <notify.h>
 #import <math.h>
 
 static void IBNRefresh(void);
@@ -15,6 +16,13 @@ static void IBNRefresh(void);
 @interface SpringBoard : UIApplication
 @end
 @interface SBSystemApertureContainerView : UIView
+@end
+// SpringBoard-private API. Prefer visibility over raw locked state: Face ID
+// may authenticate while the Lock Screen is still displayed.
+@interface SBLockScreenManager : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isLockScreenVisible;
+- (BOOL)isUILocked;
 @end
 
 @interface IBNOverlayWindow : UIWindow
@@ -55,6 +63,12 @@ static BOOL IBNAutomaticColor = YES;
 static const CGFloat IBNWidth = 126.0;
 static const CGFloat IBNHeight = 37.33;
 static const CGFloat IBNTop = 11.0;
+// Separate, fixed LOCK SCREEN profile based on the larger grey native capsule
+// visible around the lock icon. Keep the resting 126pt profile unchanged.
+static const CGFloat IBNLockWidth = 164.0;
+static const CGFloat IBNLockHeight = 34.0;
+static const CGFloat IBNLockTop = 12.5;
+static const CGFloat IBNLockOffsetX = -3.0;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
 static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default cyan)
@@ -193,13 +207,35 @@ static void IBNEnsureWindow(void) {
 static CGRect IBNOutwardStrokeRect(CGRect rect) {
     return CGRectInset(rect, -IBNThickness / 2.0, -IBNThickness / 2.0);
 }
+// This is a display-state check, NOT a preference. No change to Home/app
+// geometry, and no lock-screen alignment sliders.
+static BOOL IBNLockScreenVisible(void) {
+    Class cls = objc_getClass("SBLockScreenManager");
+    if (!cls || ![cls respondsToSelector:@selector(sharedInstance)]) return NO;
+    SBLockScreenManager *mgr = [(id)cls sharedInstance];
+    if (!mgr) return NO;
+    if ([mgr respondsToSelector:@selector(isLockScreenVisible)])
+        return [mgr isLockScreenVisible];
+    if ([mgr respondsToSelector:@selector(isUILocked)])
+        return [mgr isUILocked];
+    return NO;
+}
+static CGRect IBNRectForPortraitWidth(CGFloat portraitWidth) {
+    BOOL lockScreen = IBNLockScreenVisible();
+    CGFloat width = lockScreen ? IBNLockWidth : IBNWidth;
+    CGFloat height = lockScreen ? IBNLockHeight : IBNHeight;
+    CGFloat top = lockScreen ? IBNLockTop : IBNTop;
+    CGFloat offsetX = lockScreen ? IBNLockOffsetX : 0.0;
+    return CGRectMake((portraitWidth - width) / 2.0 + offsetX,
+                      top, width, height);
+}
 static CGRect IBNNativeRect(UIWindow *window) {
     CGRect bounds = window.bounds;
     CGFloat w = bounds.size.width, h = bounds.size.height;
     // Some system-aperture windows are full-screen, others just Island-sized.
     if (w >= 300 && h >= 300) {
         CGFloat portraitWidth = MIN(w, h), portraitHeight = MAX(w, h);
-        CGRect r = CGRectMake((portraitWidth - IBNWidth) / 2, IBNTop, IBNWidth, IBNHeight);
+        CGRect r = IBNRectForPortraitWidth(portraitWidth);
         if (w > h) {
             UIInterfaceOrientation orientation = window.windowScene.interfaceOrientation;
             if (orientation == UIInterfaceOrientationLandscapeRight) {
@@ -212,8 +248,12 @@ static CGRect IBNNativeRect(UIWindow *window) {
         return r;
     }
     if (w >= 100 && h >= 25 && h < 130) {
-        return CGRectMake((w - IBNWidth)/2, (h - IBNHeight)/2,
-                          IBNWidth, IBNHeight);
+        BOOL lockScreen = IBNLockScreenVisible();
+        CGFloat width = lockScreen ? IBNLockWidth : IBNWidth;
+        CGFloat height = lockScreen ? IBNLockHeight : IBNHeight;
+        CGFloat offsetX = lockScreen ? IBNLockOffsetX : 0;
+        return CGRectMake((w - width) / 2.0 + offsetX,
+                          (h - height) / 2.0, width, height);
     }
     return CGRectNull;
 }
@@ -322,7 +362,7 @@ static void IBNRefresh(void) {
     BOOL landscape = CGRectGetWidth(bounds) > CGRectGetHeight(bounds);
     CGFloat portraitWidth = MIN(CGRectGetWidth(bounds), CGRectGetHeight(bounds));
     CGFloat portraitHeight = MAX(CGRectGetWidth(bounds), CGRectGetHeight(bounds));
-    CGRect rect = CGRectMake((portraitWidth - IBNWidth) / 2, IBNTop, IBNWidth, IBNHeight);
+    CGRect rect = IBNRectForPortraitWidth(portraitWidth);
     BOOL geomChanged = IBNNeedsFullRedraw || !CGRectEqualToRect(rect, IBNLastRect)
         || !CGSizeEqualToSize(bounds.size, IBNLastBounds)
         || (IBNLastThickness != IBNThickness);
@@ -419,5 +459,13 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(),
                                         NULL, IBNPrefsChanged, (__bridge CFStringRef)IBNNotify,
                                         NULL, CFNotificationSuspensionBehaviorCoalesce);
+        // Recompute geometry promptly when entering/leaving the Lock Screen.
+        // No polling timer: preserve low overhead and the existing behaviour.
+        static int lockStateNotifyToken = 0;
+        notify_register_dispatch("com.apple.springboard.lockstate", &lockStateNotifyToken,
+                                 dispatch_get_main_queue(), ^(int token) {
+            IBNNeedsFullRedraw = YES;
+            IBNRefresh();
+        });
     }
 }
