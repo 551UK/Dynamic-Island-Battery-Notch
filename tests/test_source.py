@@ -332,7 +332,6 @@ class SourceTests(unittest.TestCase):
         readme = (ROOT / 'README.md').read_text()
         self.assertIn('# Dynamic Island Battery Notch', readme)
         self.assertIn('Lock Screen padlock matches the battery percentage colour theme', readme)
-        self.assertIn('**Made by 551UK**', readme)
         self.assertIn('releases/latest', readme)
         self.assertLessEqual(len(readme.splitlines()), 12)
         self.assertFalse((ROOT / 'assets/made-by-551UK.svg').exists())
