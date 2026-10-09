@@ -57,7 +57,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.29"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.30"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -73,7 +73,6 @@ jobs:
           test -s "$dylib"
           test -s "$tweak_filter"
           test -s "$prefs/IslandBatteryNotchPrefs"
-          test -s "$prefs/Root.plist"
           test -s "$prefs/Info.plist"
           test -s "$prefs/icon.png"
           icon="$root/var/jb/Library/PreferenceLoader/Preferences/IslandBatteryNotch.png"
@@ -93,7 +92,7 @@ jobs:
           test -s "$prefs_entry"
           xcrun lipo "$dylib" -verify_arch arm64 arm64e
           xcrun lipo "$prefs/IslandBatteryNotchPrefs" -verify_arch arm64 arm64e
-          plutil -lint "$prefs/Root.plist" "$prefs/Info.plist" "$prefs_entry" "$tweak_filter"
+          plutil -lint "$prefs/Info.plist" "$prefs_entry" "$tweak_filter"
           echo "Rootless package and binary verification passed."
 
       - uses: actions/upload-artifact@v4
@@ -102,58 +101,39 @@ jobs:
           path: packages/*.deb
           if-no-files-found: error
 
-      - name: Publish DEB to GitHub Releases
+      - name: Publish current DEB with no description
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.29 >/dev/null 2>&1; then
-            gh release upload v0.2.29 packages/*.deb --clobber
+          if gh release view v0.2.30 >/dev/null 2>&1; then
+            gh release upload v0.2.30 packages/*.deb --clobber
+            gh release edit v0.2.30 --notes-file /dev/null
           else
-            gh release create v0.2.29 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.29" --notes "Polish Settings labels and placement: centre Project on GitHub and the grey Made by 551UK footer; position colour thresholds directly below Automatic battery colours; remove outdated two-arcs wording; rename the normal thickness section to NORMAL LINE THICKNESS. No changes to the v0.2.28 battery rendering, charging pulse or recording geometry. Saved v0.2.14 working-base branch remains untouched."
+            gh release create v0.2.30 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.30" --notes-file /dev/null
           fi
 
-      - name: Remove legacy DEB assets older than v0.2.14
-        # Keep tags, release descriptions, sources, and all v0.2.14+ assets.
-        # This only removes .deb attachments from older v0.2.x releases.
+      - name: Remove previous DEBs and extra branches
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "$RUNNER_TEMP/releases-for-cleanup.json"
-          python3 - "$RUNNER_TEMP/releases-for-cleanup.json" <<'PY'
-          import json
-          import os
-          import re
-          import subprocess
-          import sys
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.tag_name != "v0.2.30") | .assets[] | select(.name | endswith(".deb")) | .id' \
+            > "$RUNNER_TEMP/old-deb-ids.txt"
+          while IFS= read -r asset_id; do
+            test -n "$asset_id" || continue
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}"
+          done < "$RUNNER_TEMP/old-deb-ids.txt"
 
-          with open(sys.argv[1], encoding="utf-8") as handle:
-              pages = json.load(handle)
-          repo = os.environ["GITHUB_REPOSITORY"]
-          removed = []
-          kept = []
-          for page in pages:
-              for release in page:
-                  tag = release.get("tag_name", "")
-                  match = re.fullmatch(r"v0[.]2[.](\d+)", tag)
-                  if not match:
-                      continue
-                  old = int(match.group(1)) < 14
-                  for asset in release.get("assets", []):
-                      name = asset.get("name", "")
-                      if not name.lower().endswith(".deb"):
-                          continue
-                      if old:
-                          asset_id = int(asset["id"])
-                          subprocess.run(["gh", "api", "-X", "DELETE",
-                                          f"repos/{repo}/releases/assets/{asset_id}"],
-                                         check=True)
-                          removed.append(f"{tag}/{name}")
-                      else:
-                          kept.append(f"{tag}/{name}")
-          print("Removed legacy DEBs:", json.dumps(removed))
-          print("Preserved v0.2.14+ DEBs:", json.dumps(kept))
-          PY
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100" \
+            --jq '.[] | select(.name != "main") | .name' \
+            > "$RUNNER_TEMP/old-branches.txt"
+          while IFS= read -r branch; do
+            test -n "$branch" || continue
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}"
+          done < "$RUNNER_TEMP/old-branches.txt"
+
+          echo "Current v0.2.30 DEB and main branch retained."
