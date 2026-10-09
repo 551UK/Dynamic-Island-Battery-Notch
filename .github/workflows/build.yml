@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -34,14 +34,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # dpkg-deb is installed on the Ubuntu runner.
+          brew install dpkg
           shopt -s nullglob
           debs=(packages/*.deb)
           test "${#debs[@]}" -eq 1
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.7"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.8"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -59,48 +59,12 @@ jobs:
           test -s "$prefs/IslandBatteryNotchPrefs"
           test -s "$prefs/Root.plist"
           test -s "$prefs/Info.plist"
-          python3 - "$prefs/Info.plist" <<'PY'
-          import plistlib, sys
-          with open(sys.argv[1], 'rb') as f:
-              info = plistlib.load(f)
-          assert info.get("NSPrincipalClass") == "IBNRootListController"
-          assert info.get("CFBundleExecutable") == "IslandBatteryNotchPrefs"
-          PY
+          /usr/libexec/PlistBuddy -c "Print :NSPrincipalClass" "$prefs/Info.plist" | grep -Fx IBNRootListController
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$prefs/Info.plist" | grep -Fx IslandBatteryNotchPrefs
           test -s "$prefs_entry"
-          # Verify both architectures and XML property lists on Linux.
-          python3 - "$dylib" "$prefs/IslandBatteryNotchPrefs" "$prefs/Root.plist" "$prefs/Info.plist" "$prefs_entry" <<'PY'
-          import pathlib
-          import plistlib
-          import struct
-          import sys
-
-          CPU_ARM64 = 0x0100000c
-          for path in map(pathlib.Path, sys.argv[1:3]):
-              binary = path.read_bytes()
-              magic = binary[:4]
-              archs = set()
-              if magic in (bytes.fromhex("cafebabe"), bytes.fromhex("cafebabf")):
-                  is64 = magic == bytes.fromhex("cafebabf")
-                  n = struct.unpack_from(">I", binary, 4)[0]
-                  stride = 32 if is64 else 20
-                  for i in range(n):
-                      cpu, subtype = struct.unpack_from(">II", binary, 8 + i * stride)
-                      if cpu == CPU_ARM64:
-                          archs.add(subtype & 0xff)
-              elif magic in (bytes.fromhex("cffaedfe"), bytes.fromhex("feedfacf")):
-                  order = "<" if magic == bytes.fromhex("cffaedfe") else ">"
-                  cpu, subtype = struct.unpack_from(order + "II", binary, 4)
-                  if cpu == CPU_ARM64:
-                      archs.add(subtype & 0xff)
-              assert 0 in archs, f"{path}: missing arm64 architecture: {archs}"
-              assert 2 in archs, f"{path}: missing arm64e architecture: {archs}"
-              print(f"{path}: arm64 + arm64e verified")
-          for p in sys.argv[3:]:
-              with open(p, "rb") as src:
-                  plistlib.load(src)
-              print(f"{p}: valid plist")
-          PY
-          grep -q 'com.apple.springboard' "$tweak_filter"
+          xcrun lipo "$dylib" -verify_arch arm64 arm64e
+          xcrun lipo "$prefs/IslandBatteryNotchPrefs" -verify_arch arm64 arm64e
+          plutil -lint "$prefs/Root.plist" "$prefs/Info.plist" "$prefs_entry" "$tweak_filter"
           echo "Rootless package and binary verification passed."
 
       - uses: actions/upload-artifact@v4
@@ -115,8 +79,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.7 >/dev/null 2>&1; then
-            gh release upload v0.2.7 packages/*.deb --clobber
+          if gh release view v0.2.8 >/dev/null 2>&1; then
+            gh release upload v0.2.8 packages/*.deb --clobber
           else
-            gh release create v0.2.7 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.7" --notes "Four-second delay before switching to custom charging colour, with instant colour restoration on unplug and v0.2.6 Safe Mode rollback preserved. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
+            gh release create v0.2.8 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.8" --notes "Restored the exact previously tested v0.2.4 tweak source and macOS build toolchain after reported SpringBoard Safe Mode on later versions. No charging-delay experiment or lock-screen changes. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
           fi
