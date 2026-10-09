@@ -211,7 +211,7 @@ class SourceTests(unittest.TestCase):
         self.assertIn('IBNUpdateChargingPulse(IBNRight);', TWEAK)
         self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)
         p=(ROOT / "prefs/IBNRootListController.m").read_text()
-        self.assertIn('name:@"Pulsing Charging" key:@"pulseCharging" cell:PSSwitchCell defaultValue:@NO', p)
+        self.assertIn('prefNamed:@"Pulsing Charging" key:@"pulseCharging" cell:PSSwitchCell defaultValue:@NO', p)
         cells=plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         s=next(c for c in cells if c.get("key")=="pulseCharging")
         self.assertFalse(s["default"])

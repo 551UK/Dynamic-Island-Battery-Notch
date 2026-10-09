@@ -84,3 +84,47 @@ jobs:
           else
             gh release create v0.2.17 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.17" --notes "Use a separately centred 180pt wide recording outline, and add optional linear Charging Pulse in Settings after existing 3s charging delay. Static by default, retains Lock Screen 164pt geometry and stable v0.2.14 branch. Retain v0.2.14 stable rendering, 3s charging delay and 1.5pt minimum thickness and temporarily show original keyline for stock charge animation; then show selected Charging Colour, with instant unplug recovery. v0.2.4 base without unsafe lock-manager hooks. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
           fi
+
+      - name: Remove legacy DEB assets older than v0.2.14
+        # Keep tags, release descriptions, sources, and all v0.2.14+ assets.
+        # This only removes .deb attachments from older v0.2.x releases.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "$RUNNER_TEMP/releases-for-cleanup.json"
+          python3 - "$RUNNER_TEMP/releases-for-cleanup.json" <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              pages = json.load(handle)
+          repo = os.environ["GITHUB_REPOSITORY"]
+          removed = []
+          kept = []
+          for page in pages:
+              for release in page:
+                  tag = release.get("tag_name", "")
+                  match = re.fullmatch(r"v0[.]2[.](\d+)", tag)
+                  if not match:
+                      continue
+                  old = int(match.group(1)) < 14
+                  for asset in release.get("assets", []):
+                      name = asset.get("name", "")
+                      if not name.lower().endswith(".deb"):
+                          continue
+                      if old:
+                          asset_id = int(asset["id"])
+                          subprocess.run(["gh", "api", "-X", "DELETE",
+                                          f"repos/{repo}/releases/assets/{asset_id}"],
+                                         check=True)
+                          removed.append(f"{tag}/{name}")
+                      else:
+                          kept.append(f"{tag}/{name}")
+          print("Removed legacy DEBs:", json.dumps(removed))
+          print("Preserved v0.2.14+ DEBs:", json.dumps(kept))
+          PY
