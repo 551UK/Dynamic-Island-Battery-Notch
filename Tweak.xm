@@ -131,8 +131,6 @@ static CGPathRef IBNHalfPath(CGRect r, BOOL left) {
     return CGPathCreateCopy(p.CGPath);
 }
 static UIWindowScene *IBNMainScene(void) {
-    UIWindowScene *preferred = UIApplication.sharedApplication.keyWindow.windowScene;
-    if (preferred && preferred.screen == UIScreen.mainScreen) return preferred;
     UIWindowScene *fallback = nil;
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
         if (![scene isKindOfClass:UIWindowScene.class]) continue;
@@ -281,7 +279,8 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
 %end
 %ctor {
     @autoreleasepool {
-        struct utsname info = {0};
+        struct utsname info;
+        memset(&info, 0, sizeof(info));
         if (uname(&info) != 0 || strcmp(info.machine, "iPhone15,3") != 0) return;
         IBNLoadPreferences();
         UIDevice.currentDevice.batteryMonitoringEnabled = YES;
