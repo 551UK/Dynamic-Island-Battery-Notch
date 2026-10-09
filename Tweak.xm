@@ -1,4 +1,4 @@
-// Dynamic Island Battery Notch v0.2.27 - rootless SpringBoard overlay, iOS 16.3
+// Dynamic Island Battery Notch v0.2.28 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -96,6 +96,7 @@ static const CGFloat IBNActiveRecordingOffsetX = -4.0;
 // left/right side positions and proven right-cap clearance stay unchanged.
 static const CGFloat IBNActiveRecordingTopLift = 0.75;
 static CGFloat IBNThickness = 2.5;
+static CGFloat IBNChargingThickness = 2.5; // Independent power-connected thickness.
 static NSString *IBNFixedHex = @"#30D158";
 static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default cyan)
 
@@ -253,6 +254,9 @@ static void IBNLoadPreferences(void) {
     IBNPulseCharging = value ? [value boolValue] : NO;
     value = IBNRead(@"thickness");
     IBNThickness = IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8);
+    value = IBNRead(@"chargingThickness");
+    // Unset on upgrade: match the user's normal thickness until explicitly changed.
+    IBNChargingThickness = IBNClamp(value ? [value doubleValue] : IBNThickness, 1.5, 12);
     value = IBNRead(@"fixedColor");
     IBNFixedHex = [value isKindOfClass:NSString.class] ? [value copy] : @"#30D158";
     value = IBNRead(@"chargingColor");
@@ -522,6 +526,12 @@ static void IBNRememberOriginalTint(SBSystemApertureContainerView *view, UIColor
     objc_setAssociatedObject(view, &IBNOriginalNativeTintKey, color, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
+// Select only the line weight from charging state; shape, battery progress,
+// recording profile, right clearance and 5-second post-recording delay stay fixed.
+static CGFloat IBNCurrentThickness(void) {
+    return IBNPowerConnected ? IBNChargingThickness : IBNThickness;
+}
+
 // Draw every stroke outside the physical Island mask, including at the
 // minimum 1.5 pt thickness. On the Lock Screen the black native Island fill
 // overlaps the nominal outline slightly, making a thin stroke appear faded.
@@ -530,7 +540,7 @@ static void IBNRememberOriginalTint(SBSystemApertureContainerView *view, UIColor
 // Resting Home Screen/app geometry and alignment remain byte-for-byte equal.
 static CGRect IBNOutwardStrokeRect(CGRect rect) {
     CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;
-    CGFloat inset = -(IBNThickness / 2.0 + lockClearance);
+    CGFloat inset = -(IBNCurrentThickness() / 2.0 + lockClearance);
     return CGRectInset(rect, inset, inset);
 }
 static CGRect IBNNativeRect(UIWindow *window) {
@@ -647,7 +657,7 @@ static BOOL IBNRenderSystemAperture(void) {
             CAShapeLayer *layer = pair[i];
             layer.path = i == 0 ? lp : rp;
             layer.strokeColor = color.CGColor;
-            layer.lineWidth = IBNThickness;
+            layer.lineWidth = IBNCurrentThickness();
             // Keep the first (top-centre) point anchored; shorten only
             // the bottom-centre end as the battery level decreases.
             layer.strokeStart = 0.0;
@@ -708,7 +718,7 @@ static void IBNRefresh(void) {
     CGRect rect = IBNPortraitIslandRect(portraitWidth, IBNUseExpandedOutline());
     BOOL geomChanged = IBNNeedsFullRedraw || !CGRectEqualToRect(rect, IBNLastRect)
         || !CGSizeEqualToSize(bounds.size, IBNLastBounds)
-        || (IBNLastThickness != IBNThickness);
+        || (IBNLastThickness != IBNCurrentThickness());
     BOOL colorChanged = IBNNeedsFullRedraw || !IBNLastColor || !CGColorEqualToColor(IBNLastColor, color.CGColor);
     if (!geomChanged && !colorChanged && IBNLastPercent == percent &&
         IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive)) return;
@@ -731,8 +741,8 @@ static void IBNRefresh(void) {
         IBNLeft.path = lp;
         IBNRight.path = rp;
         CGPathRelease(lp); CGPathRelease(rp);
-        IBNLeft.lineWidth = IBNThickness;
-        IBNRight.lineWidth = IBNThickness;
+        IBNLeft.lineWidth = IBNCurrentThickness();
+        IBNRight.lineWidth = IBNCurrentThickness();
     }
     if (colorChanged) {
         IBNLeft.strokeColor = color.CGColor;
@@ -753,7 +763,7 @@ static void IBNRefresh(void) {
     [CATransaction commit];
     IBNLastRect = rect;
     IBNLastBounds = bounds.size;
-    IBNLastThickness = IBNThickness;
+    IBNLastThickness = IBNCurrentThickness();
     IBNLastPercent = percent;
     IBNNeedsFullRedraw = NO;
     IBNApplyAllLockColors();

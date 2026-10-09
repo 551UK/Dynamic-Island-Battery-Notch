@@ -27,6 +27,16 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     // displays a thickness below the new physical minimum of 1.5 pt.
     if ([key isEqualToString:@"thickness"] && [result respondsToSelector:@selector(doubleValue)])
         return @(MAX(1.5, MIN(8.0, [result doubleValue])));
+    if ([key isEqualToString:@"chargingThickness"]) {
+        // Preserve the existing appearance when upgrading from versions that
+        // did not have a separate charging-thickness slider.
+        if (!stored) {
+            CFPropertyListRef normal = CFPreferencesCopyAppValue(CFSTR("thickness"), (__bridge CFStringRef)IBNDomain);
+            if (normal) result = CFBridgingRelease(normal);
+        }
+        if ([result respondsToSelector:@selector(doubleValue)])
+            return @(MAX(1.5, MIN(12.0, [result doubleValue])));
+    }
     return result;
 }
 - (void)notifyChange {
@@ -39,6 +49,8 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     if (!key) return;
     if ([key isEqualToString:@"thickness"] && [value respondsToSelector:@selector(doubleValue)])
         value = @(MAX(1.5, MIN(8.0, [value doubleValue])));
+    if ([key isEqualToString:@"chargingThickness"] && [value respondsToSelector:@selector(doubleValue)])
+        value = @(MAX(1.5, MIN(12.0, [value doubleValue])));
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value,
                              (__bridge CFStringRef)IBNDomain);
     [self notifyChange];
@@ -84,6 +96,10 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     [chargingPicker setButtonAction:@selector(openChargingColourPicker)];
     [items addObject:chargingPicker];
     [items addObject:[self prefNamed:@"Pulsing Charging" key:@"pulseCharging" cell:PSSwitchCell defaultValue:@NO]];
+    PSSpecifier *chargingThicknessGroup = [PSSpecifier groupSpecifierWithName:@"Charging Thickness"];
+    [chargingThicknessGroup setProperty:@"Increasing this makes the charging pulse look stronger. Your normal battery line thickness stays unchanged." forKey:@"footerText"];
+    [items addObject:chargingThicknessGroup];
+    [self addSlider:items name:@"Charging Line Thickness" key:@"chargingThickness" value:2.5 min:1.5 max:12];
     PSSpecifier *thicknessGroup = [PSSpecifier groupSpecifierWithName:@"Line Thickness"];
     [thicknessGroup setProperty:@"Minimum 1.5 pt (slider fully left), up to 8 pt. The Island position and shape remain fixed." forKey:@"footerText"];
     [items addObject:thicknessGroup];

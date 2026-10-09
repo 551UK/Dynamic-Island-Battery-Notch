@@ -39,7 +39,7 @@ class SourceTests(unittest.TestCase):
         # Both the native system-aperture and SpringBoard fallback must use
         # the same outward path rather than inset into the hardware cutout.
         self.assertIn('CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;', TWEAK)
-        self.assertIn('CGFloat inset = -(IBNThickness / 2.0 + lockClearance);', TWEAK)
+        self.assertIn('CGFloat inset = -(IBNCurrentThickness() / 2.0 + lockClearance);', TWEAK)
         self.assertIn('return CGRectInset(rect, inset, inset);', TWEAK)
         self.assertEqual(TWEAK.count('CGRect outwardRect = IBNOutwardStrokeRect(rect);'), 2)
         self.assertNotIn('CGRectInset(rect, IBNThickness / 2, IBNThickness / 2)', TWEAK)
@@ -120,9 +120,9 @@ class SourceTests(unittest.TestCase):
     def test_visible_minimum_stroke_lockscreen_only(self):
         # A 1.5 pt setting stays exactly 1.5 pt. The path, not the
         # stroke width, is shifted outside the native Lock Screen fill.
-        self.assertIn('layer.lineWidth = IBNThickness;', TWEAK)
-        self.assertIn('IBNLeft.lineWidth = IBNThickness;', TWEAK)
-        self.assertIn('IBNRight.lineWidth = IBNThickness;', TWEAK)
+        self.assertIn('layer.lineWidth = IBNCurrentThickness();', TWEAK)
+        self.assertIn('IBNLeft.lineWidth = IBNCurrentThickness();', TWEAK)
+        self.assertIn('IBNRight.lineWidth = IBNCurrentThickness();', TWEAK)
         self.assertNotIn('layer.lineWidth = IBNThickness +', TWEAK)
         for thickness in [1.5, 2.5, 4.0, 8.0]:
             home_inset = -(thickness / 2.0)
@@ -290,6 +290,40 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(slider["max"], 8)
         self.assertEqual(slider["default"], 2.5)
 
+    def test_separate_charging_thickness_and_explanation(self):
+        # Charging thickness replaces only the line weight, not its geometry.
+        # A missing preference inherits the normal thickness after upgrading.
+        self.assertIn('static CGFloat IBNChargingThickness = 2.5;', TWEAK)
+        self.assertIn('value = IBNRead(@"chargingThickness");', TWEAK)
+        self.assertIn('IBNChargingThickness = IBNClamp(value ? [value doubleValue] : IBNThickness, 1.5, 12);', TWEAK)
+        self.assertIn('return IBNPowerConnected ? IBNChargingThickness : IBNThickness;', TWEAK)
+        self.assertIn('CGFloat inset = -(IBNCurrentThickness() / 2.0 + lockClearance);', TWEAK)
+        self.assertEqual(TWEAK.count('CGRect outwardRect = IBNOutwardStrokeRect(rect);'), 2)
+        self.assertIn('layer.lineWidth = IBNCurrentThickness();', TWEAK)
+        self.assertIn('IBNLeft.lineWidth = IBNCurrentThickness();', TWEAK)
+        self.assertIn('IBNRight.lineWidth = IBNCurrentThickness();', TWEAK)
+        self.assertIn('IBNLastThickness != IBNCurrentThickness()', TWEAK)
+        self.assertIn('IBNLastThickness = IBNCurrentThickness();', TWEAK)
+        # All the existing right-hand, screen-recording and pulse logic stays.
+        self.assertIn('IBNActiveRecordingTopLift = 0.75;', TWEAK)
+        self.assertIn('!IBNLastDetectedLockScreen) ? 1.0 : 0.0;', TWEAK)
+        self.assertIn('fade.duration = 1.1;', TWEAK)
+        self.assertIn('(int64_t)(5.0 * NSEC_PER_SEC)', TWEAK)
+        pref = (ROOT / "prefs/IBNRootListController.m").read_text()
+        self.assertIn('name:@"Charging Line Thickness" key:@"chargingThickness" value:2.5 min:1.5 max:12', pref)
+        self.assertIn('MAX(1.5, MIN(12.0, [result doubleValue]))', pref)
+        self.assertIn('MAX(1.5, MIN(12.0, [value doubleValue]))', pref)
+        self.assertIn('if (!stored) {', pref)
+        note = "Increasing this makes the charging pulse look stronger. Your normal battery line thickness stays unchanged."
+        self.assertIn(note, pref)
+        root = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
+        slider = next(s for s in root if s.get("key") == "chargingThickness")
+        self.assertEqual(slider["min"], 1.5)
+        self.assertEqual(slider["max"], 12)
+        self.assertEqual(slider["default"], 2.5)
+        self.assertTrue(slider["showValue"])
+        self.assertTrue(any(s.get("footerText") == note for s in root))
+
     def test_branding_settings_icon_and_sileo(self):
         import base64
         control = (ROOT / "control").read_text()
@@ -361,7 +395,7 @@ class SourceTests(unittest.TestCase):
     def test_settings(self):
         data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         keys = [x.get("key") for x in data if "key" in x]
-        self.assertTrue(set(["enabled", "autoColor", "fixedColor", "chargingColor", "thickness"]).issubset(keys))
+        self.assertTrue(set(["enabled", "autoColor", "fixedColor", "chargingColor", "thickness", "chargingThickness"]).issubset(keys))
         self.assertFalse(set(["width", "height", "offsetY"]) & set(keys))
         self.assertNotIn('IBNRead(@"width")', TWEAK)
         self.assertNotIn('IBNRead(@"height")', TWEAK)
@@ -373,6 +407,7 @@ class SourceTests(unittest.TestCase):
         pref = (ROOT / "prefs/IBNRootListController.m").read_text()
         self.assertIn('@"Manual Outline Colour"', pref)
         self.assertIn('@"Charging Colour"', pref)
+        self.assertIn('@"Charging Line Thickness"', pref)
         self.assertIn('@"Line Thickness"', pref)
         self.assertNotIn('@"Island alignment"', pref)
         self.assertIn("iphoneos-arm64", (ROOT / "control").read_text())

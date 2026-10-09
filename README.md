@@ -11,6 +11,7 @@
 - A coloured outline shows how much battery you have left. It gets shorter as the battery drains.
 - Automatic green, yellow and red colours, or your own custom colour.
 - Custom charging colour with optional gentle pulsing.
+- Separate charging-only line thickness (1.5–12 pt). Increasing it makes the charging pulse appear stronger without changing the normal battery line thickness.
 - Hides the battery outline during phone calls and CallKit-integrated voice calls, restoring it when the call ends.
 - Adjustable thickness from 1.5 pt.
 - Automatically fits the Lock Screen and the screen-recording countdown and recording display.

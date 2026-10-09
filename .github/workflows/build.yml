@@ -57,7 +57,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.27"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.28"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -108,10 +108,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.27 >/dev/null 2>&1; then
-            gh release upload v0.2.27 packages/*.deb --clobber
+          if gh release view v0.2.28 >/dev/null 2>&1; then
+            gh release upload v0.2.28 packages/*.deb --clobber
           else
-            gh release create v0.2.27 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.27" --notes "Lift only the active recording top stroke by 0.75pt, so the green line remains fully visible above the black Dynamic Island. Keep the entire bottom edge, left and right sides, v0.2.26 right-curve clearance, countdown, Lock Screen and resting profiles unchanged. Maintain the exact configured line thickness, 5-second post-recording hide, 3-second charging popup pause and automatic call hiding. Saved v0.2.14 working-base branch is untouched."
+            gh release create v0.2.28 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.28" --notes "Add an independent Charging Line Thickness slider (1.5 to 12pt) with an explanation that thicker charging lines give a stronger-looking pulse. The existing normal line thickness, pulse timing, colour selection and power-on delay remain unchanged. Charging thickness defaults to the user's normal line thickness on upgrade. Retain the v0.2.27 recording-top correction, right-side clearance, 5-second recording-stop pause, and call hiding. Saved v0.2.14 working-base branch is untouched."
           fi
 
       - name: Remove legacy DEB assets older than v0.2.14
