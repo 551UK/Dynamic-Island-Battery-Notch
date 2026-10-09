@@ -238,9 +238,6 @@ class SourceTests(unittest.TestCase):
         self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)
         p=(ROOT / "prefs/IBNRootListController.m").read_text()
         self.assertIn('prefNamed:@"Pulsing Charging" key:@"pulseCharging" cell:PSSwitchCell defaultValue:@NO', p)
-        cells=plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
-        s=next(c for c in cells if c.get("key")=="pulseCharging")
-        self.assertFalse(s["default"])
 
     def test_recording_stop_hides_both_paths_for_five_seconds(self):
         # Do not reuse the charging intermission: capture and charging can
@@ -284,11 +281,6 @@ class SourceTests(unittest.TestCase):
         self.assertIn('name:@"Line Thickness" key:@"thickness" value:2.5 min:1.5 max:8', pref)
         self.assertIn('MAX(1.5, MIN(8.0, [result doubleValue]))', pref)
         self.assertIn('MAX(1.5, MIN(8.0, [value doubleValue]))', pref)
-        root = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
-        slider = next(s for s in root if s.get("key") == "thickness")
-        self.assertEqual(slider["min"], 1.5)
-        self.assertEqual(slider["max"], 8)
-        self.assertEqual(slider["default"], 2.5)
 
     def test_separate_charging_thickness_and_explanation(self):
         # Charging thickness replaces only the line weight, not its geometry.
@@ -316,13 +308,6 @@ class SourceTests(unittest.TestCase):
         self.assertIn('if (!stored) {', pref)
         note = "Increasing this makes the charging pulse look stronger. Your normal battery line thickness stays unchanged."
         self.assertIn(note, pref)
-        root = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
-        slider = next(s for s in root if s.get("key") == "chargingThickness")
-        self.assertEqual(slider["min"], 1.5)
-        self.assertEqual(slider["max"], 12)
-        self.assertEqual(slider["default"], 2.5)
-        self.assertTrue(slider["showValue"])
-        self.assertTrue(any(s.get("footerText") == note for s in root))
 
     def test_branding_settings_icon_and_sileo(self):
         import base64
@@ -344,14 +329,14 @@ class SourceTests(unittest.TestCase):
         self.assertIn('self.title = @"Dynamic Island Battery Notch";', (ROOT / 'prefs/IBNRootListController.m').read_text())
         png = base64.b64decode((ROOT / 'assets/DynamicIslandBatteryNotch.png.b64').read_text())
         self.assertTrue(png.startswith(bytes.fromhex('89504e470d0a1a0a')))
-        # README is optional: it can be intentionally cleared without
-        # affecting the compiled tweak or Settings branding.
         readme = (ROOT / 'README.md').read_text()
-        if readme.strip():
-            self.assertIn('Dynamic Island Battery Notch', readme)
-        svg = (ROOT / 'assets/made-by-551UK.svg').read_text()
-        self.assertIn('Made by 551UK', svg)
-        self.assertIn('fill="#8b949e"', svg)
+        self.assertIn('# Dynamic Island Battery Notch', readme)
+        self.assertIn('Lock Screen padlock matches the battery percentage colour theme', readme)
+        self.assertIn('**Made by 551UK**', readme)
+        self.assertIn('releases/latest', readme)
+        self.assertLessEqual(len(readme.splitlines()), 12)
+        self.assertFalse((ROOT / 'assets/made-by-551UK.svg').exists())
+        self.assertFalse((ROOT / 'prefs/Resources/Root.plist').exists())
         workflow = (ROOT / '.github/workflows/build.yml').read_text()
         self.assertIn('Generate Settings icon', workflow)
         self.assertIn('test -s "$icon"', workflow)
@@ -395,20 +380,16 @@ class SourceTests(unittest.TestCase):
 
     def test_settings_groups_credit_and_centered_github(self):
         prefs = (ROOT / "prefs/IBNRootListController.m").read_text()
-        root = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         # The automatic-colours threshold message belongs to the preceding
         # switch's group, with a new footer-free manual colour section.
         note = "0–20% red, 21–60% yellow, 61–100% green. Turn off automatic colours to use the manual colour."
         self.assertIn('[group setProperty:@"' + note + '" forKey:@"footerText"];', prefs)
         self.assertLess(prefs.index('prefNamed:@"Automatic battery colours"'), prefs.index('groupSpecifierWithName:@"Manual Colour"'))
         self.assertLess(prefs.index('groupSpecifierWithName:@"Manual Colour"'), prefs.index('preferenceSpecifierNamed:@"Manual Outline Colour"'))
-        self.assertFalse(any("footerText" in s and s.get("label") == "MANUAL COLOUR" for s in root))
-        self.assertEqual(root[0]["footerText"], note)
-        self.assertEqual(root[3]["label"], "MANUAL COLOUR")
+        self.assertIn('groupSpecifierWithName:@"Manual Colour"', prefs)
         self.assertNotIn("Two mirrored outline arcs", prefs)
-        self.assertNotIn("Two mirrored outline arcs", (ROOT / "prefs/Resources/Root.plist").read_text())
         self.assertIn('groupSpecifierWithName:@"NORMAL LINE THICKNESS"', prefs)
-        self.assertTrue(any(s.get("label") == "NORMAL LINE THICKNESS" for s in root))
+        self.assertNotIn('Minimum 1.5 pt (slider fully left)', prefs)
         # The centred link remains a clickable Preferences button. The grey
         # attribution sits in a truly centred view below it.
         self.assertIn('preferenceSpecifierNamed:@"Project on GitHub"', prefs)
@@ -420,18 +401,16 @@ class SourceTests(unittest.TestCase):
         self.assertIn('credit.textColor = UIColor.secondaryLabelColor;', prefs)
         self.assertIn('credit.textAlignment = NSTextAlignmentCenter;', prefs)
         self.assertIn('[credit.centerXAnchor constraintEqualToAnchor:footer.centerXAnchor]', prefs)
-        self.assertTrue(any(s.get("footerText") == "Made by 551UK" for s in root))
-        self.assertEqual(root[-1]["label"], "Project on GitHub")
+        self.assertIn('[about setProperty:@"Made by 551UK" forKey:@"footerText"];', prefs)
         info = plistlib.loads((ROOT / "prefs/Resources/Info.plist").read_bytes())
-        self.assertEqual(info["CFBundleShortVersionString"], "0.2.29")
-        svg = (ROOT / "assets/made-by-551UK.svg").read_text()
-        self.assertIn('>Made by 551UK</text>', svg)
+        self.assertEqual(info["CFBundleShortVersionString"], "0.2.30")
 
     def test_settings(self):
-        data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
-        keys = [x.get("key") for x in data if "key" in x]
-        self.assertTrue(set(["enabled", "autoColor", "fixedColor", "chargingColor", "thickness", "chargingThickness"]).issubset(keys))
-        self.assertFalse(set(["width", "height", "offsetY"]) & set(keys))
+        pref = (ROOT / "prefs/IBNRootListController.m").read_text()
+        for key in ("enabled", "autoColor", "pulseCharging", "chargingThickness", "thickness"):
+            self.assertIn('key:@"' + key + '"', pref)
+        for key in ("width", "height", "offsetY"):
+            self.assertNotIn('key:@"' + key + '"', pref)
         self.assertNotIn('IBNRead(@"width")', TWEAK)
         self.assertNotIn('IBNRead(@"height")', TWEAK)
         self.assertNotIn('IBNRead(@"offsetY")', TWEAK)
