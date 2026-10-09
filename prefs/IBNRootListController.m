@@ -83,6 +83,7 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
                          target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
     [chargingPicker setButtonAction:@selector(openChargingColourPicker)];
     [items addObject:chargingPicker];
+    [items addObject:[self prefNamed:@"Pulsing Charging" key:@"pulseCharging" cell:PSSwitchCell defaultValue:@NO]];
     PSSpecifier *thicknessGroup = [PSSpecifier groupSpecifierWithName:@"Line Thickness"];
     [thicknessGroup setProperty:@"Minimum 1.5 pt (slider fully left), up to 8 pt. The Island position and shape remain fixed." forKey:@"footerText"];
     [items addObject:thicknessGroup];

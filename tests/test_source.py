@@ -183,6 +183,39 @@ class SourceTests(unittest.TestCase):
         self.assertIn('(int64_t)(1.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)  # unchanged charging pause
 
+    def test_recording_uses_wider_centre_profile_only(self):
+        self.assertIn('static const CGFloat IBNRecordingWidth = 180.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNRecordingOffsetX = 0.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNLockWidth = 164.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNLockOffsetX = -3.0;', TWEAK)
+        self.assertIn('return !IBNLastDetectedLockScreen && (IBNCountdownExpanded || IBNRecordingExpanded);', TWEAK)
+        self.assertIn('recording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth)', TWEAK)
+        self.assertIn('recording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0)', TWEAK)
+
+    def test_charging_pulse_opt_in_and_linear(self):
+        self.assertIn('static BOOL IBNPulseCharging = NO;', TWEAK)
+        self.assertIn('value = IBNRead(@"pulseCharging");', TWEAK)
+        self.assertIn('IBNPulseCharging = value ? [value boolValue] : NO;', TWEAK)
+        self.assertIn('IBNPulseCharging && IBNPowerConnected', TWEAK)
+        self.assertIn('&& !IBNChargingIntermission && !layer.hidden', TWEAK)
+        self.assertIn('CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];', TWEAK)
+        self.assertIn('fade.fromValue = @1.0;', TWEAK)
+        self.assertIn('fade.toValue = @0.20;', TWEAK)
+        self.assertIn('fade.duration = 1.1;', TWEAK)
+        self.assertIn('fade.autoreverses = YES;', TWEAK)
+        self.assertIn('fade.repeatCount = HUGE_VALF;', TWEAK)
+        self.assertIn('kCAMediaTimingFunctionLinear', TWEAK)
+        self.assertIn('[layer removeAnimationForKey:key];', TWEAK)
+        self.assertIn('IBNUpdateChargingPulse(layer);', TWEAK)
+        self.assertIn('IBNUpdateChargingPulse(IBNLeft);', TWEAK)
+        self.assertIn('IBNUpdateChargingPulse(IBNRight);', TWEAK)
+        self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)
+        p=(ROOT / "prefs/IBNRootListController.m").read_text()
+        self.assertIn('name:@"Pulsing Charging" key:@"pulseCharging" cell:PSSwitchCell defaultValue:@NO', p)
+        cells=plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
+        s=next(c for c in cells if c.get("key")=="pulseCharging")
+        self.assertFalse(s["default"])
+
     def test_thickness_floor_1_5(self):
         self.assertIn("IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8)", TWEAK)
         pref = (ROOT / "prefs/IBNRootListController.m").read_text()

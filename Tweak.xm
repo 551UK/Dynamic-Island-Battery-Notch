@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.16 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.17 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -66,6 +66,7 @@ static NSString *const IBNDomain = @"com.551.islandbatterynotch";
 static NSString *const IBNNotify = @"com.551.islandbatterynotch/preferences.changed";
 static BOOL IBNEnabled = YES;
 static BOOL IBNAutomaticColor = YES;
+static BOOL IBNPulseCharging = NO; // Off means current static charging colour.
 // The iPhone 14 Pro Max alignment is fixed; only stroke thickness is adjustable.
 static const CGFloat IBNWidth = 126.0;
 static const CGFloat IBNHeight = 37.33;
@@ -76,6 +77,9 @@ static const CGFloat IBNLockWidth = 164.0;
 static const CGFloat IBNLockHeight = 34.0;
 static const CGFloat IBNLockTop = 12.5;
 static const CGFloat IBNLockOffsetX = -3.0;
+// Recording expands more than Lock Screen; leave the proven Lock Screen untouched.
+static const CGFloat IBNRecordingWidth = 180.0;
+static const CGFloat IBNRecordingOffsetX = 0.0;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
 static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default cyan)
@@ -193,6 +197,8 @@ static void IBNLoadPreferences(void) {
     IBNEnabled = value ? [value boolValue] : YES;
     value = IBNRead(@"autoColor");
     IBNAutomaticColor = value ? [value boolValue] : YES;
+    value = IBNRead(@"pulseCharging");
+    IBNPulseCharging = value ? [value boolValue] : NO;
     value = IBNRead(@"thickness");
     IBNThickness = IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8);
     value = IBNRead(@"fixedColor");
@@ -352,11 +358,15 @@ static void IBNUpdateChargingTransition(void) {
         IBNRefresh();
     });
 }
-static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL locked) {
-    CGFloat width = locked ? IBNLockWidth : IBNWidth;
-    CGFloat height = locked ? IBNLockHeight : IBNHeight;
-    CGFloat top = locked ? IBNLockTop : IBNTop;
-    CGFloat xOffset = locked ? IBNLockOffsetX : 0;
+static BOOL IBNRecordingOutlineProfile(void) {
+    return !IBNLastDetectedLockScreen && (IBNCountdownExpanded || IBNRecordingExpanded);
+}
+static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL expanded) {
+    BOOL recording = IBNRecordingOutlineProfile();
+    CGFloat width = recording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth);
+    CGFloat height = expanded ? IBNLockHeight : IBNHeight;
+    CGFloat top = expanded ? IBNLockTop : IBNTop;
+    CGFloat xOffset = recording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0);
     return CGRectMake((portraitWidth - width) / 2.0 + xOffset, top, width, height);
 }
 static void IBNQueueLockRefresh(void) {
@@ -470,9 +480,11 @@ static CGRect IBNNativeRect(UIWindow *window) {
         return r;
     }
     if (w >= 100 && h >= 25 && h < 130) {
-        CGFloat width = IBNUseExpandedOutline() ? IBNLockWidth : IBNWidth;
-        CGFloat height = IBNUseExpandedOutline() ? IBNLockHeight : IBNHeight;
-        CGFloat offset = IBNUseExpandedOutline() ? IBNLockOffsetX : 0;
+        BOOL expanded = IBNUseExpandedOutline();
+        BOOL recording = IBNRecordingOutlineProfile();
+        CGFloat width = recording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth);
+        CGFloat height = expanded ? IBNLockHeight : IBNHeight;
+        CGFloat offset = recording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0);
         return CGRectMake((w - width)/2 + offset, (h - height)/2, width, height);
     }
     return CGRectNull;
@@ -489,6 +501,27 @@ static void IBNRegisterAperture(SBSystemApertureContainerView *aperture) {
     if (!IBNApertureViews) IBNApertureViews = [NSHashTable weakObjectsHashTable];
     [IBNApertureViews addObject:aperture];
 }
+// Smooth constant-rate Core Animation fades, without polling or altering line thickness.
+static void IBNUpdateChargingPulse(CAShapeLayer *layer) {
+    if (!layer) return;
+    BOOL shouldPulse = IBNEnabled && IBNPulseCharging && IBNPowerConnected
+                       && !IBNChargingIntermission && !layer.hidden;
+    NSString *const key = @"IBNChargingPulse";
+    if (!shouldPulse) {
+        if ([layer animationForKey:key]) [layer removeAnimationForKey:key];
+        if (layer.opacity != 1.0f) layer.opacity = 1.0f;
+        return;
+    }
+    if ([layer animationForKey:key]) return; // Do not restart on redraw.
+    CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    fade.fromValue = @1.0;
+    fade.toValue = @0.20;
+    fade.duration = 1.1; // 2.2-second complete in/out cycle.
+    fade.autoreverses = YES;
+    fade.repeatCount = HUGE_VALF;
+    fade.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
+    [layer addAnimation:fade forKey:key];
+}
 static BOOL IBNRenderSystemAperture(void) {
     BOOL anyVisible = NO;
     NSMutableSet *seenWindows = [NSMutableSet set];
@@ -500,7 +533,10 @@ static BOOL IBNRenderSystemAperture(void) {
         CGRect rect = IBNNativeRect(window);
         if (CGRectIsNull(rect)) visible = NO;
         if (!visible || !IBNEnabled || UIDevice.currentDevice.batteryLevel < 0) {
-            for (CAShapeLayer *layer in pair) layer.hidden = YES;
+            for (CAShapeLayer *layer in pair) {
+                layer.hidden = YES;
+                IBNUpdateChargingPulse(layer);
+            }
             continue;
         }
         if ([seenWindows containsObject:window]) continue;
@@ -540,6 +576,7 @@ static BOOL IBNRenderSystemAperture(void) {
             layer.strokeStart = 0.0;
             layer.strokeEnd = progress;
             layer.hidden = (percent == 0 || IBNChargingIntermission);
+            IBNUpdateChargingPulse(layer);
             // A later inserted native subview must not cover our arcs.
             if (layer.superlayer == window.layer && window.layer.sublayers.lastObject != layer) {
                 [layer removeFromSuperlayer];
@@ -569,6 +606,8 @@ static void IBNRefresh(void) {
     if (!IBNEnabled) {
         IBNLeft.hidden = YES;
         IBNRight.hidden = YES;
+        IBNUpdateChargingPulse(IBNLeft);
+        IBNUpdateChargingPulse(IBNRight);
         IBNApplyAllLockColors();
         return;
     }
@@ -577,6 +616,8 @@ static void IBNRefresh(void) {
     if (device.batteryLevel < 0) {
         IBNLeft.hidden = YES;
         IBNRight.hidden = YES;
+        IBNUpdateChargingPulse(IBNLeft);
+        IBNUpdateChargingPulse(IBNRight);
         return;
     }
     NSInteger percent = (NSInteger)lround(IBNClamp(device.batteryLevel, 0, 1) * 100);
@@ -630,6 +671,8 @@ static void IBNRefresh(void) {
     IBNRight.strokeEnd = progress;
     IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;
     IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;
+    IBNUpdateChargingPulse(IBNLeft);
+    IBNUpdateChargingPulse(IBNRight);
     [CATransaction commit];
     IBNLastRect = rect;
     IBNLastBounds = bounds.size;
