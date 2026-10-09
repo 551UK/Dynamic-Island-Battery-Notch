@@ -1,4 +1,4 @@
-// Dynamic Island Battery Notch v0.2.28 - rootless SpringBoard overlay, iOS 16.3
+// Dynamic Island Battery Notch v0.2.30 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
