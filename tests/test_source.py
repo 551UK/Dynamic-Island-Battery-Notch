@@ -380,5 +380,23 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(info.get("NSPrincipalClass"), "IBNRootListController")
         self.assertIn("IBNRenderSystemAperture", TWEAK)
         self.assertIn("objc_setAssociatedObject(window, &IBNApertureLayersKey", TWEAK)
+    def test_recording_top_edge_only_lift(self):
+        # v0.2.27 corrects the thin-looking top stroke without undoing the
+        # v0.2.26 right-hand clearance or moving the bottom of the outline.
+        self.assertIn('static const CGFloat IBNActiveRecordingTopLift = 0.75;', TWEAK)
+        self.assertIn('CGFloat topLift = (IBNRecordingExpanded && !IBNLastDetectedLockScreen)', TWEAK)
+        self.assertIn('? IBNActiveRecordingTopLift : 0.0;', TWEAK)
+        self.assertIn('CGFloat top = CGRectGetMinY(r) - topLift;', TWEAK)
+        self.assertIn('CGFloat bottom = CGRectGetMaxY(r);', TWEAK)
+        self.assertIn('CGFloat centreY = CGRectGetMidY(r);', TWEAK)
+        self.assertIn('CGFloat radius = CGRectGetHeight(r) / 2.0;', TWEAK)
+        self.assertIn('CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r) + rightCapClearance;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingTop = 14.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingHeight = 32.5;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingOffsetX = -4.0;', TWEAK)
+        self.assertEqual(TWEAK.count('CGRect outwardRect = IBNOutwardStrokeRect(rect);'), 2)
+        # top-only path lift preserves the existing 5-second post-stop delay.
+        self.assertEqual(TWEAK.count('(int64_t)(5.0 * NSEC_PER_SEC)'), 1)
+
 if __name__ == "__main__":
     unittest.main()

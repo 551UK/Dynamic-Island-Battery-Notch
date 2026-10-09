@@ -1,4 +1,4 @@
-// Dynamic Island Battery Notch v0.2.26 - rootless SpringBoard overlay, iOS 16.3
+// Dynamic Island Battery Notch v0.2.27 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -92,6 +92,9 @@ static const CGFloat IBNActiveRecordingWidth = 167.0;
 static const CGFloat IBNActiveRecordingHeight = 32.5;
 static const CGFloat IBNActiveRecordingTop = 14.0;
 static const CGFloat IBNActiveRecordingOffsetX = -4.0;
+// Lift ONLY the red-dot recording profile's upper edge. The lower edge,
+// left/right side positions and proven right-cap clearance stay unchanged.
+static const CGFloat IBNActiveRecordingTopLift = 0.75;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
 static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default cyan)
@@ -290,7 +293,13 @@ static CGPathRef IBNHalfPath(CGRect r, BOOL left) {
     CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r) + rightCapClearance;
     CGFloat arcX = left ? edgeX + radius : edgeX - radius;
     CGFloat sign = left ? -1.0 : 1.0;
-    CGFloat top = CGRectGetMinY(r), bottom = CGRectGetMaxY(r);
+    // Expose a little more of the top green recording line above the black
+    // capsule, without shifting its bottom or either side. Leave radius,
+    // centreY, side control points and configured stroke width untouched.
+    CGFloat topLift = (IBNRecordingExpanded && !IBNLastDetectedLockScreen)
+                      ? IBNActiveRecordingTopLift : 0.0;
+    CGFloat top = CGRectGetMinY(r) - topLift;
+    CGFloat bottom = CGRectGetMaxY(r);
     UIBezierPath *p = [UIBezierPath bezierPath];
     [p moveToPoint:CGPointMake(centreX, top)];
     [p addLineToPoint:CGPointMake(arcX, top)];

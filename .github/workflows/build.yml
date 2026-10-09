@@ -57,7 +57,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.26"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.27"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -108,10 +108,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.26 >/dev/null 2>&1; then
-            gh release upload v0.2.26 packages/*.deb --clobber
+          if gh release view v0.2.27 >/dev/null 2>&1; then
+            gh release upload v0.2.27 packages/*.deb --clobber
           else
-            gh release create v0.2.26 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.26" --notes "Fine-tune the active recording right-hand curve outward by another 0.25pt (extra clearance 0.75pt to 1.00pt). Keep the entire left half, countdown, Lock Screen, 1.5pt minimum thickness and underlying 2pt outward stroke clearance unchanged. The 5-second hide after stopping a recording, 3-second charging popup pause, automatic call hiding, pulsing charging option and Settings icon remain unchanged. Saved v0.2.14 working-base branch is untouched."
+            gh release create v0.2.27 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.27" --notes "Lift only the active recording top stroke by 0.75pt, so the green line remains fully visible above the black Dynamic Island. Keep the entire bottom edge, left and right sides, v0.2.26 right-curve clearance, countdown, Lock Screen and resting profiles unchanged. Maintain the exact configured line thickness, 5-second post-recording hide, 3-second charging popup pause and automatic call hiding. Saved v0.2.14 working-base branch is untouched."
           fi
 
       - name: Remove legacy DEB assets older than v0.2.14
