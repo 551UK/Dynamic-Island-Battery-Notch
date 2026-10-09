@@ -73,6 +73,32 @@ class SourceTests(unittest.TestCase):
         self.assertIn('IBNLockIconVisible()', TWEAK)
         self.assertIn('IBNQueueLockRefresh()', TWEAK)
 
+    def test_charging_popup_unobstructed(self):
+        self.assertIn("static void IBNUpdateChargingTransition(void)", TWEAK)
+        self.assertIn("static BOOL IBNChargingIntermission = NO;", TWEAK)
+        self.assertIn("(int64_t)(4.0 * NSEC_PER_SEC)", TWEAK)
+        self.assertIn("if (connected == IBNPowerConnected) return;", TWEAK)
+        self.assertIn("NSUInteger token = ++IBNPowerTransitionToken;", TWEAK)
+        self.assertIn("if (token != IBNPowerTransitionToken || !IBNPowerConnected) return;", TWEAK)
+        self.assertIn("if (IBNPowerConnected && !IBNChargingIntermission)", TWEAK)
+        self.assertIn("layer.hidden = (percent == 0 || IBNChargingIntermission);", TWEAK)
+        self.assertIn("IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;", TWEAK)
+        self.assertIn("IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;", TWEAK)
+        self.assertIn("IBNApplyNativeBorderState();", TWEAK)
+        # Stock keyline can reappear during the four-second native popup.
+        self.assertIn("IBNEnabled && !IBNChargingIntermission", TWEAK)
+        # No new private lock-manager hooks or dedicated polling loops.
+        self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
+        self.assertNotIn("notify_register_dispatch", TWEAK)
+    def test_lock_visible_when_composited(self):
+        # Regression: older ancestor-window 'hidden' walk made the visibly
+        # green lock on the screenshot read as not visible.
+        self.assertNotIn("view.window.hidden ||", TWEAK)
+        self.assertIn("[view convertRect:b toView:window]", TWEAK)
+        self.assertIn("IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen)", TWEAK)
+        self.assertIn("static const CGFloat IBNLockWidth = 164.0;", TWEAK)
+        self.assertIn("static const CGFloat IBNWidth = 126.0;", TWEAK)
+
     def test_settings(self):
         data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         keys = [x.get("key") for x in data if "key" in x]

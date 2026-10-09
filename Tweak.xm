@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.9 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.10 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -86,6 +86,13 @@ static char IBNOriginalLockStoredKey;
 // Coalesce redraw requests from the existing lock-icon layout lifecycle.
 static BOOL IBNLockRefreshQueued = NO;
 static BOOL IBNLastDetectedLockScreen = NO;
+// Charging transition: immediately hide all battery arcs on plug-in, let
+// native iOS charging UI run for 4 seconds, then show the custom colour.
+// No polling, no additional SpringBoard hooks or private lock-state APIs.
+static BOOL IBNPowerStateKnown = NO;
+static BOOL IBNPowerConnected = NO;
+static BOOL IBNChargingIntermission = NO;
+static NSUInteger IBNPowerTransitionToken = 0;
 static char IBNApertureLayersKey;
 static BOOL IBNHasActiveSystemAperture = NO;
 static IBNOverlayWindow *IBNWindow = nil;
@@ -132,8 +139,7 @@ static UIColor *IBNColorFromHex(NSString *value, UIColor *fallback) {
 }
 static UIColor *IBNColorForPercent(NSInteger percent) {
     // While connected to power, charging colour always overrides percentage and manual/auto modes.
-    UIDeviceBatteryState state = UIDevice.currentDevice.batteryState;
-    if (state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull)
+    if (IBNPowerConnected && !IBNChargingIntermission)
         return IBNColorFromHex(IBNChargingHex, UIColor.cyanColor);
     if (!IBNAutomaticColor) return IBNColorFromHex(IBNFixedHex, UIColor.systemGreenColor);
     if (percent <= 20) return [UIColor colorWithRed:1 green:69.0 / 255 blue:58.0 / 255 alpha:1];
@@ -210,19 +216,67 @@ static void IBNEnsureWindow(void) {
     IBNNeedsFullRedraw = YES;
 }
 
-static BOOL IBNViewActuallyVisible(UIView *view) {
-    if (!view || !view.window || view.window.hidden || view.window.alpha < 0.02) return NO;
-    for (UIView *item = view; item; item = item.superview) {
-        if (item.hidden || item.alpha < 0.02) return NO;
-        if (item == view.window) break;
-    }
-    return YES;
-}
+// iOS 16's proud-lock view can be hosted inside a secure, composited
+// system window whose ancestor 'hidden' flag is not a reliable indication
+// that the lock glyph is actually rendered. In v0.2.9 the ancestor walk
+// incorrectly rejected the lock icon that was visibly GREEN on-screen.
 static BOOL IBNLockIconVisible(void) {
     for (SBUIProudLockIconView *view in [IBNLockViews allObjects]) {
-        if (IBNViewActuallyVisible(view)) return YES;
+        UIWindow *window = view.window;
+        if (!window || view.hidden || view.alpha < 0.02) continue;
+        CGRect b = view.bounds;
+        if (CGRectIsEmpty(b)) continue;
+        // Require a real window attachment and a view intersecting the
+        // on-screen aperture region. Offscreen cached views don't qualify.
+        CGRect r = [view convertRect:b toView:window];
+        if (CGRectIsNull(r) || CGRectIsEmpty(r)) continue;
+        CGRect screenArea = CGRectInset(window.bounds, -5, -5);
+        if (!CGRectIntersectsRect(r, screenArea)) continue;
+        return YES;
     }
     return NO;
+}
+static void IBNApplyNativeBorderState(void) {
+    // Existing v0.2.9 hook normally makes the native keyline transparent.
+    // Temporarily permit iOS's original keyline during the charging popup.
+    for (SBSystemApertureContainerView *view in [IBNApertureViews allObjects]) {
+        UIColor *original = objc_getAssociatedObject(view, &IBNOriginalNativeTintKey);
+        [view setKeyLineTintColor:(IBNEnabled && !IBNChargingIntermission)
+                                  ? UIColor.clearColor : original];
+    }
+}
+static void IBNUpdateChargingTransition(void) {
+    UIDeviceBatteryState batteryState = UIDevice.currentDevice.batteryState;
+    BOOL connected = batteryState == UIDeviceBatteryStateCharging ||
+                     batteryState == UIDeviceBatteryStateFull;
+    if (!IBNPowerStateKnown) {
+        IBNPowerStateKnown = YES;
+        IBNPowerConnected = connected;
+        // Relaunch while plugged in: no fresh charging popup to wait for.
+        IBNChargingIntermission = NO;
+        return;
+    }
+    if (connected == IBNPowerConnected) return;
+    IBNPowerConnected = connected;
+    NSUInteger token = ++IBNPowerTransitionToken;
+    if (!connected) {
+        IBNChargingIntermission = NO;
+        IBNNeedsFullRedraw = YES;
+        IBNApplyNativeBorderState();
+        return;
+    }
+    // Hide native-app and fallback battery strokes IMMEDIATELY on plug-in.
+    IBNChargingIntermission = YES;
+    IBNNeedsFullRedraw = YES;
+    IBNApplyNativeBorderState();
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (token != IBNPowerTransitionToken || !IBNPowerConnected) return;
+        IBNChargingIntermission = NO;
+        IBNNeedsFullRedraw = YES;
+        IBNApplyNativeBorderState();
+        IBNRefresh();
+    });
 }
 static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL locked) {
     CGFloat width = locked ? IBNLockWidth : IBNWidth;
@@ -407,7 +461,7 @@ static BOOL IBNRenderSystemAperture(void) {
             // the bottom-centre end as the battery level decreases.
             layer.strokeStart = 0.0;
             layer.strokeEnd = progress;
-            layer.hidden = (percent == 0);
+            layer.hidden = (percent == 0 || IBNChargingIntermission);
             // A later inserted native subview must not cover our arcs.
             if (layer.superlayer == window.layer && window.layer.sublayers.lastObject != layer) {
                 [layer removeFromSuperlayer];
@@ -426,6 +480,7 @@ static void IBNRefresh(void) {
         dispatch_async(dispatch_get_main_queue(), ^{ IBNRefresh(); });
         return;
     }
+    IBNUpdateChargingTransition();
     IBNLastDetectedLockScreen = IBNLockIconVisible();
     IBNEnsureWindow();
     // The native aperture window is composited above foreground applications.
@@ -458,7 +513,7 @@ static void IBNRefresh(void) {
         || (IBNLastThickness != IBNThickness);
     BOOL colorChanged = IBNNeedsFullRedraw || !IBNLastColor || !CGColorEqualToColor(IBNLastColor, color.CGColor);
     if (!geomChanged && !colorChanged && IBNLastPercent == percent &&
-        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0)) return;
+        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission)) return;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (geomChanged) {
@@ -493,8 +548,8 @@ static void IBNRefresh(void) {
     IBNRight.strokeStart = 0.0;
     IBNLeft.strokeEnd = progress;
     IBNRight.strokeEnd = progress;
-    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0;
-    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0;
+    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;
+    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;
     [CATransaction commit];
     IBNLastRect = rect;
     IBNLastBounds = bounds.size;
@@ -511,7 +566,8 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
         for (SBSystemApertureContainerView *view in [IBNApertureViews allObjects]) {
             // Restore the stock outline on disable; hide it while enabled.
             UIColor *original = objc_getAssociatedObject(view, &IBNOriginalNativeTintKey);
-            [view setKeyLineTintColor:IBNEnabled ? UIColor.clearColor : original];
+            [view setKeyLineTintColor:(IBNEnabled && !IBNChargingIntermission)
+                                          ? UIColor.clearColor : original];
         }
         IBNRefresh();
     });
@@ -531,28 +587,28 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
 // Dynamic Island LS Color tweak, but keep the key-line transparent.
 - (void)setKeyLineTintColor:(UIColor *)color {
     IBNRememberOriginalTint(self, color);
-    %orig(IBNEnabled ? UIColor.clearColor : color);
+    %orig((IBNEnabled && !IBNChargingIntermission) ? UIColor.clearColor : color);
 }
 - (UIColor *)keyLineTintColor {
-    return IBNEnabled ? UIColor.clearColor : %orig;
+    return (IBNEnabled && !IBNChargingIntermission) ? UIColor.clearColor : %orig;
 }
 - (UIColor *)_validatedKeyLineTintColor {
-    return IBNEnabled ? UIColor.clearColor : %orig;
+    return (IBNEnabled && !IBNChargingIntermission) ? UIColor.clearColor : %orig;
 }
 - (void)_applySettingsValues {
     %orig;
-    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
+    if (IBNEnabled && !IBNChargingIntermission) [self setKeyLineTintColor:UIColor.clearColor];
 }
 - (void)didMoveToWindow {
     %orig;
     IBNRegisterAperture(self);
-    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
+    if (IBNEnabled && !IBNChargingIntermission) [self setKeyLineTintColor:UIColor.clearColor];
     IBNRefresh();
 }
 - (void)layoutSubviews {
     %orig;
     IBNRegisterAperture(self);
-    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
+    if (IBNEnabled && !IBNChargingIntermission) [self setKeyLineTintColor:UIColor.clearColor];
     if (self.window) IBNRefresh();
 }
 %end

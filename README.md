@@ -1,5 +1,11 @@
 # Dynamic Island Battery Notch
 
+## Experimental v0.2.10 — Lock Screen alignment detection and charging popup
+
+Corrects the Lock Screen-only size decision: `SBUIProudLockIconView` is already mounted and coloured successfully in v0.2.9, but its secure hosting-window ancestor could report hidden, causing v0.2.9 to choose the Home Screen-sized outline. v0.2.10 examines the lock view's own attachment and on-screen bounds instead, without adding any private lock-manager hook. The locked geometry remains 164 × 34 pt, offset slightly left; Home Screen/apps remain 126 × 37.33 pt.
+
+**On a new charging connection:** immediately hide both arcs entirely for 4 seconds, temporarily restore iOS's original keyline for the native charging popup, then hide the stock keyline again and show the battery arcs in the separately selected Charging Colour. Unplugging restores normal colours and cancels the pending timer. No changes were made to the other Dynamic Island tweak. On-device testing is still needed.
+
 ## Experimental v0.2.9 — Lock Screen native outline / lock colour
 
 Built from the original v0.2.4 source. On the Lock Screen only, battery arcs use a wider 164 × 34 pt fixed profile, offset 3 pt left; the resting 126 × 37.33 pt Island profile is unchanged for Home Screen and apps. Detects the existing visible `SBUIProudLockIconView` rather than calling `SBLockScreenManager` (which caused SpringBoard Safe Mode in v0.2.5). Retains the same working SpringBoard rendering hooks and top-connected battery progression.
