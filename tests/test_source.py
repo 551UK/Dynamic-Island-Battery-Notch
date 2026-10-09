@@ -38,7 +38,9 @@ class SourceTests(unittest.TestCase):
     def test_visible_outward_thickness(self):
         # Both the native system-aperture and SpringBoard fallback must use
         # the same outward path rather than inset into the hardware cutout.
-        self.assertIn('CGRectInset(rect, -IBNThickness / 2.0, -IBNThickness / 2.0)', TWEAK)
+        self.assertIn('CGFloat lockClearance = IBNLastDetectedLockScreen ? 2.0 : 0.0;', TWEAK)
+        self.assertIn('CGFloat inset = -(IBNThickness / 2.0 + lockClearance);', TWEAK)
+        self.assertIn('return CGRectInset(rect, inset, inset);', TWEAK)
         self.assertEqual(TWEAK.count('CGRect outwardRect = IBNOutwardStrokeRect(rect);'), 2)
         self.assertNotIn('CGRectInset(rect, IBNThickness / 2, IBNThickness / 2)', TWEAK)
         # With outward drawing, the original pill remains the INNER border
@@ -112,6 +114,23 @@ class SourceTests(unittest.TestCase):
         self.assertIn("static const CGFloat IBNLockHeight = 34.0;", TWEAK)
         self.assertIn("static const CGFloat IBNWidth = 126.0;", TWEAK)
         self.assertIn("static const CGFloat IBNHeight = 37.33;", TWEAK)
+        self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
+
+    def test_visible_minimum_stroke_lockscreen_only(self):
+        # A 1.5 pt setting stays exactly 1.5 pt. The path, not the
+        # stroke width, is shifted outside the native Lock Screen fill.
+        self.assertIn('layer.lineWidth = IBNThickness;', TWEAK)
+        self.assertIn('IBNLeft.lineWidth = IBNThickness;', TWEAK)
+        self.assertIn('IBNRight.lineWidth = IBNThickness;', TWEAK)
+        self.assertNotIn('layer.lineWidth = IBNThickness +', TWEAK)
+        for thickness in [1.5, 2.5, 4.0, 8.0]:
+            home_inset = -(thickness / 2.0)
+            locked_inset = -(thickness / 2.0 + 2.0)
+            self.assertAlmostEqual(home_inset - locked_inset, 2.0)
+            # Inner visible edge lands two points outside baseline pill.
+            self.assertAlmostEqual(locked_inset + thickness / 2.0, -2.0)
+        self.assertIn('CGFloat lockClearance = IBNLastDetectedLockScreen ? 2.0 : 0.0;', TWEAK)
+        self.assertIn('IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen)', TWEAK)
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
 
     def test_thickness_floor_1_5(self):

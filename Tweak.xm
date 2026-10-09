@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.13 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.14 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -366,12 +366,16 @@ static void IBNRememberOriginalTint(SBSystemApertureContainerView *view, UIColor
     objc_setAssociatedObject(view, &IBNOriginalNativeTintKey, color, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-// Draw OUTSIDE the physical cutout, not into it: screenshot pixels inside
-// the hardware pill can show up in captures but cannot be seen on the panel.
-// Our path is centred t/2 outside the nominal aperture boundary, so the
-// innermost edge of the stroke stays at the original measured Island edge.
+// Draw every stroke outside the physical Island mask, including at the
+// minimum 1.5 pt thickness. On the Lock Screen the black native Island fill
+// overlaps the nominal outline slightly, making a thin stroke appear faded.
+// Keep the REAL lineWidth at the user's value; move only the lock-screen path
+// 2pt OUTWARD beyond the native fill instead of increasing thickness.
+// Resting Home Screen/app geometry and alignment remain byte-for-byte equal.
 static CGRect IBNOutwardStrokeRect(CGRect rect) {
-    return CGRectInset(rect, -IBNThickness / 2.0, -IBNThickness / 2.0);
+    CGFloat lockClearance = IBNLastDetectedLockScreen ? 2.0 : 0.0;
+    CGFloat inset = -(IBNThickness / 2.0 + lockClearance);
+    return CGRectInset(rect, inset, inset);
 }
 static CGRect IBNNativeRect(UIWindow *window) {
     CGRect bounds = window.bounds;

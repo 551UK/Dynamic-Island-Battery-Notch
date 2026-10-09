@@ -41,7 +41,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.13"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.14"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -79,8 +79,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.13 >/dev/null 2>&1; then
-            gh release upload v0.2.13 packages/*.deb --clobber
+          if gh release view v0.2.14 >/dev/null 2>&1; then
+            gh release upload v0.2.14 packages/*.deb --clobber
           else
-            gh release create v0.2.13 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.13" --notes "Restore v0.2.11 native Lock Screen battery lines after v0.2.12 hid them; shorten charge popup pause to three seconds; preserve native border transparency, padlock colour, 1.5 pt minimum and lock size and temporarily show original keyline for stock charge animation; then show selected Charging Colour, with instant unplug recovery. v0.2.4 base without unsafe lock-manager hooks. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
+            gh release create v0.2.14 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.14" --notes "Make the true 1.5pt Lock Screen stroke fully visible by shifting only the battery path 2pt outside the native black fill; keep Home Screen/apps geometry, 3s charging pause, lock icon and lineWidth unchanged and temporarily show original keyline for stock charge animation; then show selected Charging Colour, with instant unplug recovery. v0.2.4 base without unsafe lock-manager hooks. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
           fi

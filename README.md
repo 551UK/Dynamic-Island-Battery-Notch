@@ -1,5 +1,9 @@
 # Dynamic Island Battery Notch
 
+## Experimental v0.2.14 — visible Lock Screen stroke at minimum thickness
+
+The thin green Lock Screen line at **1.5 pt** was partly obscured by the black native Island surface. The drawing path now receives an additional fixed **2 pt outward clearance only on the Lock Screen**, beyond the normal half-stroke outward position. The actual user-selected lineWidth stays at 1.5–8 pt, and the normal Home Screen/app alignment stays exactly as in v0.2.13. No rendering-path or lock-detection changes were introduced. The padlock colour, transparent original keyline, and **3-second charging pause** remain unchanged. This is a targeted experimental visual correction requiring on-device confirmation.
+
 ## Experimental v0.2.13 — restore native Lock Screen lines; 3-second charging pause
 
 Restore the **exact v0.2.11 drawing implementation**: the Lock Screen uses the system-aperture window's arc layers again. v0.2.12 hid those native layers in favour of a separate overlay that turned out not to be visible above the Lock Screen, removing the green outline. This release removes that regression. The working wide Lock Screen profile, transparent original white border, lock icon synced to battery/charging colour, two mirrored progress arcs, 1.5–8pt line thickness slider and rendering in apps are all retained.
