@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.2 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.3 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Two mirrored halves each lose 1% length on every reported 1% battery drop.
 #import <UIKit/UIKit.h>
@@ -186,6 +186,13 @@ static void IBNEnsureWindow(void) {
     IBNWindow.hidden = NO; // Do not steal the app's key window.
     IBNNeedsFullRedraw = YES;
 }
+// Draw OUTSIDE the physical cutout, not into it: screenshot pixels inside
+// the hardware pill can show up in captures but cannot be seen on the panel.
+// Our path is centred t/2 outside the nominal aperture boundary, so the
+// innermost edge of the stroke stays at the original measured Island edge.
+static CGRect IBNOutwardStrokeRect(CGRect rect) {
+    return CGRectInset(rect, -IBNThickness / 2.0, -IBNThickness / 2.0);
+}
 static CGRect IBNNativeRect(UIWindow *window) {
     CGRect bounds = window.bounds;
     CGFloat w = bounds.size.width, h = bounds.size.height;
@@ -258,9 +265,9 @@ static BOOL IBNRenderSystemAperture(void) {
         NSInteger percent = (NSInteger)lround(IBNClamp(UIDevice.currentDevice.batteryLevel, 0, 1)*100);
         CGFloat trim = (1.0 - (CGFloat)percent / 100.0)/2.0;
         UIColor *color = IBNColorForPercent(percent);
-        CGRect inner = CGRectInset(rect, IBNThickness / 2, IBNThickness / 2);
-        CGPathRef lp = IBNHalfPath(inner, YES);
-        CGPathRef rp = IBNHalfPath(inner, NO);
+        CGRect outwardRect = IBNOutwardStrokeRect(rect);
+        CGPathRef lp = IBNHalfPath(outwardRect, YES);
+        CGPathRef rp = IBNHalfPath(outwardRect, NO);
         [CATransaction begin];
         [CATransaction setDisableActions:YES];
         for (NSUInteger i = 0; i < 2; i++) {
@@ -323,9 +330,9 @@ static void IBNRefresh(void) {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (geomChanged) {
-        CGRect inner = CGRectInset(rect, IBNThickness / 2, IBNThickness / 2);
-        CGPathRef lp = IBNHalfPath(inner, YES);
-        CGPathRef rp = IBNHalfPath(inner, NO);
+        CGRect outwardRect = IBNOutwardStrokeRect(rect);
+        CGPathRef lp = IBNHalfPath(outwardRect, YES);
+        CGPathRef rp = IBNHalfPath(outwardRect, NO);
         if (landscape) {
             UIInterfaceOrientation o = IBNWindow.windowScene.interfaceOrientation;
             CGAffineTransform transform = (o == UIInterfaceOrientationLandscapeRight)

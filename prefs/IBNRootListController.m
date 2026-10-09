@@ -77,7 +77,7 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     [chargingPicker setButtonAction:@selector(openChargingColourPicker)];
     [items addObject:chargingPicker];
     PSSpecifier *thicknessGroup = [PSSpecifier groupSpecifierWithName:@"Line Thickness"];
-    [thicknessGroup setProperty:@"Increase or decrease the outline thickness around the Island. Its position, height and width are fixed." forKey:@"footerText"];
+    [thicknessGroup setProperty:@"Increase or decrease the VISIBLE outline thickness outside the Island. The original position and shape remain fixed." forKey:@"footerText"];
     [items addObject:thicknessGroup];
     [self addSlider:items name:@"Line Thickness" key:@"thickness" value:2.5 min:0.5 max:8];
     PSSpecifier *about = [PSSpecifier groupSpecifierWithName:@"About"];

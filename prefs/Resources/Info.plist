@@ -8,5 +8,5 @@
 <key>NSPrincipalClass</key><string>IBNRootListController</string>
 <key>MinimumOSVersion</key><string>16.0</string>
 <key>CFBundlePackageType</key><string>BNDL</string>
-<key>CFBundleShortVersionString</key><string>0.2.2</string>
+<key>CFBundleShortVersionString</key><string>0.2.3</string>
 </dict></plist>

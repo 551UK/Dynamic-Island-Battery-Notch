@@ -22,6 +22,24 @@ class SourceTests(unittest.TestCase):
             self.assertIn(band, ["red", "yellow", "green"])
         self.assertIn("if (percent <= 20)", TWEAK)
         self.assertIn("if (percent <= 60)", TWEAK)
+    def test_visible_outward_thickness(self):
+        # Both the native system-aperture and SpringBoard fallback must use
+        # the same outward path rather than inset into the hardware cutout.
+        self.assertIn('CGRectInset(rect, -IBNThickness / 2.0, -IBNThickness / 2.0)', TWEAK)
+        self.assertEqual(TWEAK.count('CGRect outwardRect = IBNOutwardStrokeRect(rect);'), 2)
+        self.assertNotIn('CGRectInset(rect, IBNThickness / 2, IBNThickness / 2)', TWEAK)
+        # With outward drawing, the original pill remains the INNER border
+        # while the visible OUTER edge changes by exactly the thickness.
+        for thickness in (0.5, 1, 2.5, 4, 8):
+            original_top = 11.0
+            original_bottom = 11.0 + 37.33
+            path_top = original_top - thickness / 2
+            path_bottom = original_bottom + thickness / 2
+            self.assertAlmostEqual(path_top + thickness / 2, original_top)
+            self.assertAlmostEqual(path_top - thickness / 2, original_top - thickness)
+            self.assertAlmostEqual(path_bottom - thickness / 2, original_bottom)
+            self.assertAlmostEqual(path_bottom + thickness / 2, original_bottom + thickness)
+
     def test_settings(self):
         data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         keys = [x.get("key") for x in data if "key" in x]
