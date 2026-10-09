@@ -399,7 +399,7 @@ class SourceTests(unittest.TestCase):
         # switch's group, with a new footer-free manual colour section.
         note = "0–20% red, 21–60% yellow, 61–100% green. Turn off automatic colours to use the manual colour."
         self.assertIn('[group setProperty:@"' + note + '" forKey:@"footerText"];', prefs)
-        self.assertLess(prefs.index('name:@"Automatic battery colours"'), prefs.index('groupSpecifierWithName:@"Manual Colour"'))
+        self.assertLess(prefs.index('prefNamed:@"Automatic battery colours"'), prefs.index('groupSpecifierWithName:@"Manual Colour"'))
         self.assertLess(prefs.index('groupSpecifierWithName:@"Manual Colour"'), prefs.index('preferenceSpecifierNamed:@"Manual Outline Colour"'))
         self.assertFalse(any("footerText" in s and s.get("label") == "MANUAL COLOUR" for s in root))
         self.assertEqual(root[0]["footerText"], note)
