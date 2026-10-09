@@ -9,4 +9,4 @@ Dynamic Island Battery Notch displays your remaining charge as a coloured line a
 - Custom charging colour, optional pulsing, and separate normal/charging line thickness.
 - Fits screen recording and the Lock Screen; hides during calls.
 
-[Latest DEB](https://github.com/551UK/Dynamic-Island-Battery-Notch/releases/latest)
+
