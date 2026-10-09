@@ -1,6 +1,6 @@
 Package: com.551.islandbatterynotch
 Name: Island Battery Notch
-Version: 0.2.6
+Version: 0.2.7
 Architecture: iphoneos-arm64
 Description: Symmetric battery arcs around the Dynamic Island, continuously visible on Lock Screen, Home Screen and apps. iPhone 14 Pro Max, iOS 16 rootless.
 Maintainer: 551UK

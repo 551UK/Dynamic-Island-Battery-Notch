@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.6 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.7 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -76,6 +76,46 @@ static CGSize IBNLastBounds = {0,0};
 static CGFloat IBNLastThickness = -1;
 static CGColorRef IBNLastColor = NULL;
 
+// Four-second delay after a NEW charger connection so iOS's native charging
+// Dynamic Island popup can finish before the charging colour takes over.
+// No extra SpringBoard hooks, lock-screen APIs or polling timers.
+static BOOL IBNPowerStateKnown = NO;
+static BOOL IBNPowerConnected = NO;
+static BOOL IBNChargingColorReady = NO;
+static NSUInteger IBNChargingTransition = 0;
+
+static BOOL IBNIsOnPower(void) {
+    UIDeviceBatteryState state = UIDevice.currentDevice.batteryState;
+    return state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull;
+}
+static void IBNUpdateChargingState(void) {
+    BOOL onPower = IBNIsOnPower();
+    if (!IBNPowerStateKnown) {
+        // If SpringBoard restarts while already charging, show the selected
+        // charging colour immediately; no new charging popup occurred.
+        IBNPowerStateKnown = YES;
+        IBNPowerConnected = onPower;
+        IBNChargingColorReady = onPower;
+        return;
+    }
+    if (onPower == IBNPowerConnected) return; // Never restart delay on redraws.
+    IBNPowerConnected = onPower;
+    NSUInteger token = ++IBNChargingTransition;
+    if (!onPower) {
+        // Unplug: immediately restore automatic/manual battery colour and
+        // invalidate any pending charging-colour callback.
+        IBNChargingColorReady = NO;
+        return;
+    }
+    IBNChargingColorReady = NO;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (token != IBNChargingTransition || !IBNIsOnPower()) return;
+        IBNChargingColorReady = YES;
+        IBNRefresh();
+    });
+}
+
 static id IBNRead(NSString *key) {
     CFPropertyListRef p = CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)IBNDomain);
     return p ? CFBridgingRelease(p) : nil;
@@ -108,9 +148,9 @@ static UIColor *IBNColorFromHex(NSString *value, UIColor *fallback) {
                             blue:(rgb & 255) / 255.0 alpha:1];
 }
 static UIColor *IBNColorForPercent(NSInteger percent) {
-    // While connected to power, charging colour always overrides percentage and manual/auto modes.
-    UIDeviceBatteryState state = UIDevice.currentDevice.batteryState;
-    if (state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull)
+    // Delay charging colour for four seconds after a newly detected plug-in.
+    // While waiting, use the regular automatic/manual battery colour.
+    if (IBNChargingColorReady && IBNIsOnPower())
         return IBNColorFromHex(IBNChargingHex, UIColor.cyanColor);
     if (!IBNAutomaticColor) return IBNColorFromHex(IBNFixedHex, UIColor.systemGreenColor);
     if (percent <= 20) return [UIColor colorWithRed:1 green:69.0 / 255 blue:58.0 / 255 alpha:1];
@@ -298,6 +338,10 @@ static void IBNRefresh(void) {
         dispatch_async(dispatch_get_main_queue(), ^{ IBNRefresh(); });
         return;
     }
+    // Update before either drawing path; battery notifications trigger refresh.
+    if (!UIDevice.currentDevice.batteryMonitoringEnabled)
+        UIDevice.currentDevice.batteryMonitoringEnabled = YES;
+    IBNUpdateChargingState();
     IBNEnsureWindow();
     // The native aperture window is composited above foreground applications.
     IBNHasActiveSystemAperture = IBNRenderSystemAperture();

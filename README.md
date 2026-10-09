@@ -4,6 +4,10 @@ A dedicated iPhone 14 Pro Max (iPhone15,3) Dopamine rootless tweak for iOS 16.3.
 
 The floating transparent SpringBoard overlay draws two symmetric battery-progress outlines around the resting Dynamic Island. Each line becomes exactly 1% shorter for every one percent of battery capacity lost, splitting at the bottom and staying connected at the top. The lines are visible on the Lock Screen, Home Screen, and inside apps; do not intercept touch. Red 0–20%, yellow 21–60%, green 61–100%. Settings offers enable toggle, automatic/manual colour, fixed alignment and adjustable line thickness.
 
+## v0.2.7 charging colour delay
+
+After detecting a **new charger connection**, the outline keeps its normal automatic percentage colour (or manual outline colour) for **4 seconds** while iOS's charging popup appears. After the delay, it switches to the selected Charging Colour. Unplugging restores the normal colour immediately and cancels any pending delayed change. Repeated battery level changes or app switching do not restart the delay. If SpringBoard starts while already connected to power, the charging colour can be used immediately. The original v0.2.6 Safe Mode rollback, Island placement, and 1%-per-step outline progress are untouched.
+
 ## v0.2.6 safety rollback
 
 **Do not use v0.2.5:** It was reported to put SpringBoard in Safe Mode on the Lock Screen. v0.2.6 removes its unverified private lock-screen manager calls and expanded lock-screen drawing profile, restoring v0.2.4 rendering (including the bottom-up battery split, outward thickness, and colour settings). This is a safety rollback, not a new Lock Screen border-alignment fix. A crash log is needed before reintroducing it.
