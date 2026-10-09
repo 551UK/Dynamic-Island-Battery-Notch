@@ -1,8 +1,12 @@
 # Dynamic Island Battery Notch
 
-## v0.2.8 — original v0.2.4 source restored
+## Experimental v0.2.9 — Lock Screen native outline / lock colour
 
-This release uses the **exact v0.2.4 tweak source**, the **original v0.2.4 preferences and tests**, and the same **macOS 15 build workflow** as v0.2.4. Only the package/release version and release documentation are updated. All code introduced in v0.2.5–v0.2.7 has been discarded. In particular, the lock-screen size experiment and the four-second charging colour delay are **not** included. v0.2.4 remains available unchanged if you prefer its original build. Do not install versions v0.2.5–v0.2.7 if they caused SpringBoard Safe Mode on your device.
+Built from the original v0.2.4 source. On the Lock Screen only, battery arcs use a wider 164 × 34 pt fixed profile, offset 3 pt left; the resting 126 × 37.33 pt Island profile is unchanged for Home Screen and apps. Detects the existing visible `SBUIProudLockIconView` rather than calling `SBLockScreenManager` (which caused SpringBoard Safe Mode in v0.2.5). Retains the same working SpringBoard rendering hooks and top-connected battery progression.
+
+Reuses the native `SBSystemApertureContainerView` key-line colour hooks and lock-icon filter principles from `551UK/Dynamic-Island-LS-Color-16`, **without modifying that repository**. While enabled, the native outside outline uses `UIColor.clearColor` (the battery arcs remain visible). The Lock Screen padlock uses the SAME colour as the battery arcs, including charging colour and manual colour selection; disabling restores the native key-line tint and original lock appearance.
+
+**Before installing, disable or uninstall Dynamic Island LS Color 16** — both tweaks hook the same native border and padlock and could conflict if enabled simultaneously. This version does NOT include the previously requested four-second charging delay; it is intentionally isolated for stability testing. The earlier v0.2.4 release remains unchanged and available for rollback. This is experimental and must be tested on-device.
 
 A dedicated iPhone 14 Pro Max (iPhone15,3) Dopamine rootless tweak for iOS 16.3.
 

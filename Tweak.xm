@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.4 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.9 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -8,6 +8,7 @@
 #import <sys/utsname.h>
 #import <string.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 #import <math.h>
 
 static void IBNRefresh(void);
@@ -15,6 +16,14 @@ static void IBNRefresh(void);
 @interface SpringBoard : UIApplication
 @end
 @interface SBSystemApertureContainerView : UIView
+- (void)setKeyLineTintColor:(UIColor *)color;
+- (UIColor *)keyLineTintColor;
+- (UIColor *)_validatedKeyLineTintColor;
+- (void)_applySettingsValues;
+@end
+// The already-tested Lock Screen lock view hook from Dynamic-Island-LS-Color-16.
+// No SBLockScreenManager, lock-state notification, or guessed private selector.
+@interface SBUIProudLockIconView : UIView
 @end
 
 @interface IBNOverlayWindow : UIWindow
@@ -55,6 +64,12 @@ static BOOL IBNAutomaticColor = YES;
 static const CGFloat IBNWidth = 126.0;
 static const CGFloat IBNHeight = 37.33;
 static const CGFloat IBNTop = 11.0;
+// Fixed Lock Screen-only dimensions based on the user's grey outlined capsule.
+// Normal Home Screen and app profile remains EXACTLY 126 x 37.33 at y=11.
+static const CGFloat IBNLockWidth = 164.0;
+static const CGFloat IBNLockHeight = 34.0;
+static const CGFloat IBNLockTop = 12.5;
+static const CGFloat IBNLockOffsetX = -3.0;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
 static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default cyan)
@@ -63,6 +78,14 @@ static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default
 // auxiliary SpringBoard window can end up BEHIND foreground applications, so
 // paint in the existing system-aperture window when one is visible.
 static NSHashTable *IBNApertureViews = nil; // weak references
+static NSHashTable *IBNLockViews = nil;     // weak references
+static char IBNOriginalNativeTintKey;
+static char IBNOriginalLockFiltersKey;
+static char IBNOriginalLockTintKey;
+static char IBNOriginalLockStoredKey;
+// Coalesce redraw requests from the existing lock-icon layout lifecycle.
+static BOOL IBNLockRefreshQueued = NO;
+static BOOL IBNLastDetectedLockScreen = NO;
 static char IBNApertureLayersKey;
 static BOOL IBNHasActiveSystemAperture = NO;
 static IBNOverlayWindow *IBNWindow = nil;
@@ -186,6 +209,109 @@ static void IBNEnsureWindow(void) {
     IBNWindow.hidden = NO; // Do not steal the app's key window.
     IBNNeedsFullRedraw = YES;
 }
+
+static BOOL IBNViewActuallyVisible(UIView *view) {
+    if (!view || !view.window || view.window.hidden || view.window.alpha < 0.02) return NO;
+    for (UIView *item = view; item; item = item.superview) {
+        if (item.hidden || item.alpha < 0.02) return NO;
+        if (item == view.window) break;
+    }
+    return YES;
+}
+static BOOL IBNLockIconVisible(void) {
+    for (SBUIProudLockIconView *view in [IBNLockViews allObjects]) {
+        if (IBNViewActuallyVisible(view)) return YES;
+    }
+    return NO;
+}
+static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL locked) {
+    CGFloat width = locked ? IBNLockWidth : IBNWidth;
+    CGFloat height = locked ? IBNLockHeight : IBNHeight;
+    CGFloat top = locked ? IBNLockTop : IBNTop;
+    CGFloat xOffset = locked ? IBNLockOffsetX : 0;
+    return CGRectMake((portraitWidth - width) / 2.0 + xOffset, top, width, height);
+}
+static void IBNQueueLockRefresh(void) {
+    if (IBNLockRefreshQueued) return;
+    IBNLockRefreshQueued = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        IBNLockRefreshQueued = NO;
+        BOOL visible = IBNLockIconVisible();
+        if (visible != IBNLastDetectedLockScreen) {
+            IBNLastDetectedLockScreen = visible;
+            IBNNeedsFullRedraw = YES;
+            IBNRefresh();
+        }
+    });
+}
+// Copied principle from the working Dynamic Island LS Color tweak: apply a
+// monochrome CoreAnimation filter to the lock glyph, preserving its original.
+static UIView *IBNPrivateSubview(UIView *view, NSString *key) {
+    if (!view || !key) return nil;
+    @try {
+        id sub = [view valueForKey:key];
+        return [sub isKindOfClass:UIView.class] ? sub : nil;
+    } @catch (__unused NSException *e) { return nil; }
+}
+static void IBNStoreLockAppearance(UIView *view) {
+    if (!view || [objc_getAssociatedObject(view, &IBNOriginalLockStoredKey) boolValue]) return;
+    id filters = nil;
+    @try { filters = [view.layer valueForKey:@"filters"]; }
+    @catch (__unused NSException *e) {}
+    objc_setAssociatedObject(view, &IBNOriginalLockFiltersKey, filters ?: (id)NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(view, &IBNOriginalLockTintKey, view.tintColor ?: (id)NSNull.null, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(view, &IBNOriginalLockStoredKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+static void IBNApplyLockViewColor(UIView *view, UIColor *color) {
+    if (!view) return;
+    IBNStoreLockAppearance(view);
+    if (!IBNEnabled) {
+        id filters = objc_getAssociatedObject(view, &IBNOriginalLockFiltersKey);
+        @try { [view.layer setValue:filters == NSNull.null ? nil : filters forKey:@"filters"]; }
+        @catch (__unused NSException *e) {}
+        id tint = objc_getAssociatedObject(view, &IBNOriginalLockTintKey);
+        view.tintColor = tint == NSNull.null ? nil : tint;
+        return;
+    }
+    view.tintColor = color;
+    @try {
+        Class filterClass = NSClassFromString(@"CAFilter");
+        SEL sel = NSSelectorFromString(@"filterWithType:");
+        if (!filterClass || ![filterClass respondsToSelector:sel]) return;
+        id filter = ((id (*)(id, SEL, id))objc_msgSend)(filterClass, sel, @"colorMonochrome");
+        if (!filter) return;
+        [filter setValue:(__bridge id)color.CGColor forKey:@"inputColor"];
+        [filter setValue:@1.0 forKey:@"inputAmount"];
+        [view.layer setValue:@[filter] forKey:@"filters"];
+    } @catch (__unused NSException *e) {}
+}
+static void IBNApplyProudLockColor(SBUIProudLockIconView *root) {
+    if (!root) return;
+    UIDevice *device = UIDevice.currentDevice;
+    if (!device.batteryMonitoringEnabled) device.batteryMonitoringEnabled = YES;
+    NSInteger percent = device.batteryLevel >= 0 ? (NSInteger)lround(IBNClamp(device.batteryLevel, 0, 1) * 100) : 100;
+    UIColor *color = IBNColorForPercent(percent);
+    UIView *lockGlyph = IBNPrivateSubview(root, @"_lockView");
+    IBNApplyLockViewColor(lockGlyph ?: root, color);
+    UIView *container = IBNPrivateSubview(root, @"_iconContainerView");
+    if (container && container != lockGlyph) {
+        IBNStoreLockAppearance(container);
+        if (IBNEnabled) container.tintColor = color;
+        else {
+            id tint = objc_getAssociatedObject(container, &IBNOriginalLockTintKey);
+            container.tintColor = tint == NSNull.null ? nil : tint;
+        }
+    }
+}
+static void IBNApplyAllLockColors(void) {
+    for (SBUIProudLockIconView *view in [IBNLockViews allObjects])
+        IBNApplyProudLockColor(view);
+}
+static void IBNRememberOriginalTint(SBSystemApertureContainerView *view, UIColor *color) {
+    if (!view || !color || [color isEqual:UIColor.clearColor]) return;
+    objc_setAssociatedObject(view, &IBNOriginalNativeTintKey, color, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 // Draw OUTSIDE the physical cutout, not into it: screenshot pixels inside
 // the hardware pill can show up in captures but cannot be seen on the panel.
 // Our path is centred t/2 outside the nominal aperture boundary, so the
@@ -199,7 +325,7 @@ static CGRect IBNNativeRect(UIWindow *window) {
     // Some system-aperture windows are full-screen, others just Island-sized.
     if (w >= 300 && h >= 300) {
         CGFloat portraitWidth = MIN(w, h), portraitHeight = MAX(w, h);
-        CGRect r = CGRectMake((portraitWidth - IBNWidth) / 2, IBNTop, IBNWidth, IBNHeight);
+        CGRect r = IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen);
         if (w > h) {
             UIInterfaceOrientation orientation = window.windowScene.interfaceOrientation;
             if (orientation == UIInterfaceOrientationLandscapeRight) {
@@ -212,8 +338,10 @@ static CGRect IBNNativeRect(UIWindow *window) {
         return r;
     }
     if (w >= 100 && h >= 25 && h < 130) {
-        return CGRectMake((w - IBNWidth)/2, (h - IBNHeight)/2,
-                          IBNWidth, IBNHeight);
+        CGFloat width = IBNLastDetectedLockScreen ? IBNLockWidth : IBNWidth;
+        CGFloat height = IBNLastDetectedLockScreen ? IBNLockHeight : IBNHeight;
+        CGFloat offset = IBNLastDetectedLockScreen ? IBNLockOffsetX : 0;
+        return CGRectMake((w - width)/2 + offset, (h - height)/2, width, height);
     }
     return CGRectNull;
 }
@@ -298,6 +426,7 @@ static void IBNRefresh(void) {
         dispatch_async(dispatch_get_main_queue(), ^{ IBNRefresh(); });
         return;
     }
+    IBNLastDetectedLockScreen = IBNLockIconVisible();
     IBNEnsureWindow();
     // The native aperture window is composited above foreground applications.
     IBNHasActiveSystemAperture = IBNRenderSystemAperture();
@@ -305,6 +434,7 @@ static void IBNRefresh(void) {
     if (!IBNEnabled) {
         IBNLeft.hidden = YES;
         IBNRight.hidden = YES;
+        IBNApplyAllLockColors();
         return;
     }
     UIDevice *device = UIDevice.currentDevice;
@@ -322,7 +452,7 @@ static void IBNRefresh(void) {
     BOOL landscape = CGRectGetWidth(bounds) > CGRectGetHeight(bounds);
     CGFloat portraitWidth = MIN(CGRectGetWidth(bounds), CGRectGetHeight(bounds));
     CGFloat portraitHeight = MAX(CGRectGetWidth(bounds), CGRectGetHeight(bounds));
-    CGRect rect = CGRectMake((portraitWidth - IBNWidth) / 2, IBNTop, IBNWidth, IBNHeight);
+    CGRect rect = IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen);
     BOOL geomChanged = IBNNeedsFullRedraw || !CGRectEqualToRect(rect, IBNLastRect)
         || !CGSizeEqualToSize(bounds.size, IBNLastBounds)
         || (IBNLastThickness != IBNThickness);
@@ -371,11 +501,20 @@ static void IBNRefresh(void) {
     IBNLastThickness = IBNThickness;
     IBNLastPercent = percent;
     IBNNeedsFullRedraw = NO;
+    IBNApplyAllLockColors();
 }
 static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
                             CFStringRef name, const void *object, CFDictionaryRef info) {
     IBNLoadPreferences();
-    dispatch_async(dispatch_get_main_queue(), ^{ IBNNeedsFullRedraw = YES; IBNRefresh(); });
+    dispatch_async(dispatch_get_main_queue(), ^{
+        IBNNeedsFullRedraw = YES;
+        for (SBSystemApertureContainerView *view in [IBNApertureViews allObjects]) {
+            // Restore the stock outline on disable; hide it while enabled.
+            UIColor *original = objc_getAssociatedObject(view, &IBNOriginalNativeTintKey);
+            [view setKeyLineTintColor:IBNEnabled ? UIColor.clearColor : original];
+        }
+        IBNRefresh();
+    });
 }
 %hook SpringBoard
 - (void)applicationDidFinishLaunching:(id)application {
@@ -388,15 +527,49 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
 }
 %end
 %hook SBSystemApertureContainerView
+// Use the same native key-line selector as the user's existing working
+// Dynamic Island LS Color tweak, but keep the key-line transparent.
+- (void)setKeyLineTintColor:(UIColor *)color {
+    IBNRememberOriginalTint(self, color);
+    %orig(IBNEnabled ? UIColor.clearColor : color);
+}
+- (UIColor *)keyLineTintColor {
+    return IBNEnabled ? UIColor.clearColor : %orig;
+}
+- (UIColor *)_validatedKeyLineTintColor {
+    return IBNEnabled ? UIColor.clearColor : %orig;
+}
+- (void)_applySettingsValues {
+    %orig;
+    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
+}
 - (void)didMoveToWindow {
     %orig;
     IBNRegisterAperture(self);
+    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
     IBNRefresh();
 }
 - (void)layoutSubviews {
     %orig;
     IBNRegisterAperture(self);
+    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
     if (self.window) IBNRefresh();
+}
+%end
+%hook SBUIProudLockIconView
+- (void)didMoveToWindow {
+    %orig;
+    if (!IBNLockViews) IBNLockViews = [NSHashTable weakObjectsHashTable];
+    [IBNLockViews addObject:self];
+    IBNApplyProudLockColor(self);
+    IBNQueueLockRefresh();
+}
+- (void)layoutSubviews {
+    %orig;
+    if (!IBNLockViews) IBNLockViews = [NSHashTable weakObjectsHashTable];
+    [IBNLockViews addObject:self];
+    IBNApplyProudLockColor(self);
+    IBNQueueLockRefresh();
 }
 %end
 %ctor {
@@ -406,6 +579,7 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
         if (uname(&info) != 0 || strcmp(info.machine, "iPhone15,3") != 0) return;
         IBNLoadPreferences();
         IBNApertureViews = [NSHashTable weakObjectsHashTable];
+        IBNLockViews = [NSHashTable weakObjectsHashTable];
         UIDevice.currentDevice.batteryMonitoringEnabled = YES;
         %init;
         NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;

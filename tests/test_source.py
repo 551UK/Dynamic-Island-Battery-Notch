@@ -53,6 +53,26 @@ class SourceTests(unittest.TestCase):
             self.assertAlmostEqual(path_bottom - thickness / 2, original_bottom)
             self.assertAlmostEqual(path_bottom + thickness / 2, original_bottom + thickness)
 
+    def test_native_keyline_and_lock_colour(self):
+        # Reuse only existing tested lifecycle and colour hooks; no
+        # SBLockScreenManager or Darwin lockstate observer (v0.2.5 crash).
+        self.assertIn('%hook SBUIProudLockIconView', TWEAK)
+        self.assertIn('%hook SBSystemApertureContainerView', TWEAK)
+        self.assertIn('IBNApplyProudLockColor', TWEAK)
+        self.assertIn('IBNColorForPercent(percent)', TWEAK)
+        self.assertIn('%orig(IBNEnabled ? UIColor.clearColor : color);', TWEAK)
+        self.assertIn('return IBNEnabled ? UIColor.clearColor : %orig;', TWEAK)
+        self.assertNotIn('SBLockScreenManager', TWEAK)
+        self.assertNotIn('notify_register_dispatch("com.apple.springboard.lockstate"', TWEAK)
+    def test_lock_screen_only_geometry(self):
+        self.assertIn('static const CGFloat IBNLockWidth = 164.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNLockHeight = 34.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNWidth = 126.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNHeight = 37.33;', TWEAK)
+        self.assertIn('IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen)', TWEAK)
+        self.assertIn('IBNLockIconVisible()', TWEAK)
+        self.assertIn('IBNQueueLockRefresh()', TWEAK)
+
     def test_settings(self):
         data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         keys = [x.get("key") for x in data if "key" in x]
