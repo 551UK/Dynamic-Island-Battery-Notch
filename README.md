@@ -1,5 +1,11 @@
 # Dynamic Island Battery Notch
 
+## Experimental v0.2.15 — screen recording expanded outline
+
+Based on the confirmed working **v0.2.14** code. While UIKit reports screen capture, select the existing larger 164 × 34 pt Lock Screen outline, including the -3 pt horizontal offset and 2 pt outward clearance. When capture stops, hold this expanded outline for **1 second**, then restore the default 126 × 37.33 pt Home Screen/app outline. If recording resumes during that one-second hold, the pending return is cancelled. Actual Lock Screen presence always takes priority and keeps the outline expanded.
+
+Uses only `UIScreenCapturedDidChangeNotification` and `UIScreen.isCaptured`, a public capture state which also detects display mirroring. Control Centre's built-in countdown occurs before recording actually starts, so this outline changes at the start of capture rather than the initial button press. No private recording hooks and no changes to the `stable/v0.2.14-working-base` branch. Colours, padlock, thickness, and three-second charging pause are unchanged.
+
 ## Experimental v0.2.14 — visible Lock Screen stroke at minimum thickness
 
 The thin green Lock Screen line at **1.5 pt** was partly obscured by the black native Island surface. The drawing path now receives an additional fixed **2 pt outward clearance only on the Lock Screen**, beyond the normal half-stroke outward position. The actual user-selected lineWidth stays at 1.5–8 pt, and the normal Home Screen/app alignment stays exactly as in v0.2.13. No rendering-path or lock-detection changes were introduced. The padlock colour, transparent original keyline, and **3-second charging pause** remain unchanged. This is a targeted experimental visual correction requiring on-device confirmation.

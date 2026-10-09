@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.14 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.15 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -86,6 +86,12 @@ static char IBNOriginalLockStoredKey;
 // Coalesce redraw requests from the existing lock-icon layout lifecycle.
 static BOOL IBNLockRefreshQueued = NO;
 static BOOL IBNLastDetectedLockScreen = NO;
+// UIKit's public capture state also indicates screen mirroring. It is used
+// only to select the already-proven large Lock Screen battery outline.
+static BOOL IBNRecordingStateKnown = NO;
+static BOOL IBNLastCaptured = NO;
+static BOOL IBNRecordingExpanded = NO;
+static NSUInteger IBNRecordingTransition = 0;
 // Charging transition: immediately hide all battery arcs on plug-in, let
 // native iOS charging UI run for 3 seconds, then show the custom colour.
 // No polling, no additional SpringBoard hooks or private lock-state APIs.
@@ -105,6 +111,37 @@ static CGRect IBNLastRect = {{0,0},{0,0}};
 static CGSize IBNLastBounds = {0,0};
 static CGFloat IBNLastThickness = -1;
 static CGColorRef IBNLastColor = NULL;
+
+static BOOL IBNUseExpandedOutline(void) {
+    return IBNLastDetectedLockScreen || IBNRecordingExpanded;
+}
+static void IBNUpdateScreenCaptureState(void) {
+    BOOL captured = UIScreen.mainScreen.isCaptured;
+    if (!IBNRecordingStateKnown) {
+        IBNRecordingStateKnown = YES;
+        IBNLastCaptured = captured;
+        IBNRecordingExpanded = captured;
+        return;
+    }
+    if (captured == IBNLastCaptured) return;
+    IBNLastCaptured = captured;
+    NSUInteger transition = ++IBNRecordingTransition;
+    if (captured) {
+        // Expand immediately once iOS confirms capture has started.
+        IBNRecordingExpanded = YES;
+        IBNNeedsFullRedraw = YES;
+        return;
+    }
+    // On stop, retain enlarged outline for one second, then return to
+    // resting size unless capture restarted or the Lock Screen is visible.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;
+        IBNRecordingExpanded = NO;
+        IBNNeedsFullRedraw = YES;
+        IBNRefresh();
+    });
+}
 
 static id IBNRead(NSString *key) {
     CFPropertyListRef p = CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)IBNDomain);
@@ -373,7 +410,7 @@ static void IBNRememberOriginalTint(SBSystemApertureContainerView *view, UIColor
 // 2pt OUTWARD beyond the native fill instead of increasing thickness.
 // Resting Home Screen/app geometry and alignment remain byte-for-byte equal.
 static CGRect IBNOutwardStrokeRect(CGRect rect) {
-    CGFloat lockClearance = IBNLastDetectedLockScreen ? 2.0 : 0.0;
+    CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;
     CGFloat inset = -(IBNThickness / 2.0 + lockClearance);
     return CGRectInset(rect, inset, inset);
 }
@@ -383,7 +420,7 @@ static CGRect IBNNativeRect(UIWindow *window) {
     // Some system-aperture windows are full-screen, others just Island-sized.
     if (w >= 300 && h >= 300) {
         CGFloat portraitWidth = MIN(w, h), portraitHeight = MAX(w, h);
-        CGRect r = IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen);
+        CGRect r = IBNPortraitIslandRect(portraitWidth, IBNUseExpandedOutline());
         if (w > h) {
             UIInterfaceOrientation orientation = window.windowScene.interfaceOrientation;
             if (orientation == UIInterfaceOrientationLandscapeRight) {
@@ -396,9 +433,9 @@ static CGRect IBNNativeRect(UIWindow *window) {
         return r;
     }
     if (w >= 100 && h >= 25 && h < 130) {
-        CGFloat width = IBNLastDetectedLockScreen ? IBNLockWidth : IBNWidth;
-        CGFloat height = IBNLastDetectedLockScreen ? IBNLockHeight : IBNHeight;
-        CGFloat offset = IBNLastDetectedLockScreen ? IBNLockOffsetX : 0;
+        CGFloat width = IBNUseExpandedOutline() ? IBNLockWidth : IBNWidth;
+        CGFloat height = IBNUseExpandedOutline() ? IBNLockHeight : IBNHeight;
+        CGFloat offset = IBNUseExpandedOutline() ? IBNLockOffsetX : 0;
         return CGRectMake((w - width)/2 + offset, (h - height)/2, width, height);
     }
     return CGRectNull;
@@ -486,6 +523,7 @@ static void IBNRefresh(void) {
     }
     IBNUpdateChargingTransition();
     IBNLastDetectedLockScreen = IBNLockIconVisible();
+    IBNUpdateScreenCaptureState();
     IBNEnsureWindow();
     // The native aperture window is composited above foreground applications.
     IBNHasActiveSystemAperture = IBNRenderSystemAperture();
@@ -511,7 +549,7 @@ static void IBNRefresh(void) {
     BOOL landscape = CGRectGetWidth(bounds) > CGRectGetHeight(bounds);
     CGFloat portraitWidth = MIN(CGRectGetWidth(bounds), CGRectGetHeight(bounds));
     CGFloat portraitHeight = MAX(CGRectGetWidth(bounds), CGRectGetHeight(bounds));
-    CGRect rect = IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen);
+    CGRect rect = IBNPortraitIslandRect(portraitWidth, IBNUseExpandedOutline());
     BOOL geomChanged = IBNNeedsFullRedraw || !CGRectEqualToRect(rect, IBNLastRect)
         || !CGSizeEqualToSize(bounds.size, IBNLastBounds)
         || (IBNLastThickness != IBNThickness);
@@ -645,6 +683,7 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
         NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
         for (NSString *name in @[ UIDeviceBatteryLevelDidChangeNotification,
                                    UIDeviceBatteryStateDidChangeNotification,
+                                   UIScreenCapturedDidChangeNotification,
                                    UISceneDidActivateNotification,
                                    UIApplicationDidBecomeActiveNotification ]) {
             [nc addObserverForName:name object:nil queue:NSOperationQueue.mainQueue

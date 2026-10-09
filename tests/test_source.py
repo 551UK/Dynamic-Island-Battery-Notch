@@ -38,7 +38,7 @@ class SourceTests(unittest.TestCase):
     def test_visible_outward_thickness(self):
         # Both the native system-aperture and SpringBoard fallback must use
         # the same outward path rather than inset into the hardware cutout.
-        self.assertIn('CGFloat lockClearance = IBNLastDetectedLockScreen ? 2.0 : 0.0;', TWEAK)
+        self.assertIn('CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;', TWEAK)
         self.assertIn('CGFloat inset = -(IBNThickness / 2.0 + lockClearance);', TWEAK)
         self.assertIn('return CGRectInset(rect, inset, inset);', TWEAK)
         self.assertEqual(TWEAK.count('CGRect outwardRect = IBNOutwardStrokeRect(rect);'), 2)
@@ -71,7 +71,7 @@ class SourceTests(unittest.TestCase):
         self.assertIn('static const CGFloat IBNLockHeight = 34.0;', TWEAK)
         self.assertIn('static const CGFloat IBNWidth = 126.0;', TWEAK)
         self.assertIn('static const CGFloat IBNHeight = 37.33;', TWEAK)
-        self.assertIn('IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen)', TWEAK)
+        self.assertIn('IBNPortraitIslandRect(portraitWidth, IBNUseExpandedOutline())', TWEAK)
         self.assertIn('IBNLockIconVisible()', TWEAK)
         self.assertIn('IBNQueueLockRefresh()', TWEAK)
 
@@ -99,7 +99,7 @@ class SourceTests(unittest.TestCase):
         # green lock on the screenshot read as not visible.
         self.assertNotIn("view.window.hidden ||", TWEAK)
         self.assertIn("[view convertRect:b toView:window]", TWEAK)
-        self.assertIn("IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen)", TWEAK)
+        self.assertIn("IBNPortraitIslandRect(portraitWidth, IBNUseExpandedOutline())", TWEAK)
         self.assertIn("static const CGFloat IBNLockWidth = 164.0;", TWEAK)
         self.assertIn("static const CGFloat IBNWidth = 126.0;", TWEAK)
 
@@ -129,9 +129,31 @@ class SourceTests(unittest.TestCase):
             self.assertAlmostEqual(home_inset - locked_inset, 2.0)
             # Inner visible edge lands two points outside baseline pill.
             self.assertAlmostEqual(locked_inset + thickness / 2.0, -2.0)
-        self.assertIn('CGFloat lockClearance = IBNLastDetectedLockScreen ? 2.0 : 0.0;', TWEAK)
-        self.assertIn('IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen)', TWEAK)
+        self.assertIn('CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;', TWEAK)
+        self.assertIn('IBNPortraitIslandRect(portraitWidth, IBNUseExpandedOutline())', TWEAK)
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
+
+    def test_capture_uses_stable_lock_screen_geometry(self):
+        self.assertIn('UIScreenCapturedDidChangeNotification', TWEAK)
+        self.assertIn('BOOL captured = UIScreen.mainScreen.isCaptured;', TWEAK)
+        self.assertIn('return IBNLastDetectedLockScreen || IBNRecordingExpanded;', TWEAK)
+        self.assertIn('IBNPortraitIslandRect(portraitWidth, IBNUseExpandedOutline())', TWEAK)
+        self.assertIn('CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;', TWEAK)
+        self.assertIn('IBNRecordingExpanded = YES;', TWEAK)
+        self.assertIn('IBNUpdateScreenCaptureState();', TWEAK)
+        # Retain native-window rendering which works on Lock Screen;
+        # do not reproduce the v0.2.12 hidden-line regression.
+        self.assertIn('BOOL visible = IBNVisibleAperture(aperture);', TWEAK)
+        self.assertNotIn('if (IBNLastDetectedLockScreen) {\n            for (CAShapeLayer *layer in pair) layer.hidden = YES;', TWEAK)
+        self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
+
+    def test_capture_end_wait_one_second(self):
+        self.assertIn('(int64_t)(1.0 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('NSUInteger transition = ++IBNRecordingTransition;', TWEAK)
+        self.assertIn('if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;', TWEAK)
+        self.assertIn('IBNRecordingExpanded = NO;', TWEAK)
+        # Charging popup keeps its independent 3-second delay.
+        self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)
 
     def test_thickness_floor_1_5(self):
         self.assertIn("IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8)", TWEAK)
