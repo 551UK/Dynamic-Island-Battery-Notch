@@ -1,6 +1,6 @@
-// Island Battery Notch v0.2.3 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.4 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
-// Two mirrored halves each lose 1% length on every reported 1% battery drop.
+// Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -263,7 +263,7 @@ static BOOL IBNRenderSystemAperture(void) {
         }
         // Window-level layers aren't constrained by the capsule view's mask.
         NSInteger percent = (NSInteger)lround(IBNClamp(UIDevice.currentDevice.batteryLevel, 0, 1)*100);
-        CGFloat trim = (1.0 - (CGFloat)percent / 100.0)/2.0;
+        CGFloat progress = (CGFloat)percent / 100.0;
         UIColor *color = IBNColorForPercent(percent);
         CGRect outwardRect = IBNOutwardStrokeRect(rect);
         CGPathRef lp = IBNHalfPath(outwardRect, YES);
@@ -275,8 +275,10 @@ static BOOL IBNRenderSystemAperture(void) {
             layer.path = i == 0 ? lp : rp;
             layer.strokeColor = color.CGColor;
             layer.lineWidth = IBNThickness;
-            layer.strokeStart = trim;
-            layer.strokeEnd = 1.0 - trim;
+            // Keep the first (top-centre) point anchored; shorten only
+            // the bottom-centre end as the battery level decreases.
+            layer.strokeStart = 0.0;
+            layer.strokeEnd = progress;
             layer.hidden = (percent == 0);
             // A later inserted native subview must not cover our arcs.
             if (layer.superlayer == window.layer && window.layer.sublayers.lastObject != layer) {
@@ -355,11 +357,12 @@ static void IBNRefresh(void) {
         if (IBNLastColor) CGColorRelease(IBNLastColor);
         IBNLastColor = CGColorRetain(color.CGColor);
     }
-    CGFloat trim = (1.0 - progress) / 2.0;
-    IBNLeft.strokeStart = trim;
-    IBNRight.strokeStart = trim;
-    IBNLeft.strokeEnd = 1.0 - trim;
-    IBNRight.strokeEnd = 1.0 - trim;
+    // Both paths begin at the same TOP-CENTRE point. Removing length only
+    // from the END creates a growing opening from the BOTTOM upwards.
+    IBNLeft.strokeStart = 0.0;
+    IBNRight.strokeStart = 0.0;
+    IBNLeft.strokeEnd = progress;
+    IBNRight.strokeEnd = progress;
     IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0;
     IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0;
     [CATransaction commit];

@@ -2,7 +2,9 @@
 
 A dedicated iPhone 14 Pro Max (iPhone15,3) Dopamine rootless tweak for iOS 16.3.
 
-The floating transparent SpringBoard overlay draws two symmetric battery-progress outlines around the resting Dynamic Island. Each line becomes exactly 1% shorter for every one percent of battery capacity lost. The lines are visible on the Lock Screen, Home Screen, and inside apps; do not intercept touch. Red 0–20%, yellow 21–60%, green 61–100%. Settings offers enable toggle, automatic/manual colour, fixed alignment and adjustable line thickness.
+The floating transparent SpringBoard overlay draws two symmetric battery-progress outlines around the resting Dynamic Island. Each line becomes exactly 1% shorter for every one percent of battery capacity lost, splitting at the bottom and staying connected at the top. The lines are visible on the Lock Screen, Home Screen, and inside apps; do not intercept touch. Red 0–20%, yellow 21–60%, green 61–100%. Settings offers enable toggle, automatic/manual colour, fixed alignment and adjustable line thickness.
+
+Version 0.2.4 keeps both outline arcs connected at the top-centre of the Dynamic Island and shortens them only from the bottom upward as the battery falls, continuously by 1% per battery percent. At 100% the top and bottom are both closed; at 0% the arcs vanish. Automatic/manual outline and charging colours and the outward line thickness adjustment remain unchanged.
 
 Version 0.2.3 corrects line thickness visibility on the physical panel by drawing the extra width outward from the Island edge rather than inside the hardware cutout, without changing alignment. Screenshot pixels inside the cutout are not visible on the display.
 

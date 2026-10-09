@@ -11,11 +11,24 @@ class SourceTests(unittest.TestCase):
             self.assertIn(term, TWEAK)
     def test_one_percent_arcs(self):
         self.assertIn("lround(IBNClamp(device.batteryLevel, 0, 1) * 100)", TWEAK)
-        self.assertIn("CGFloat trim = (1.0 - progress) / 2.0;", TWEAK)
-        for p in range(1, 101):
-            s = (1 - p/100)/2
-            prev = (1 - (p-1)/100)/2
-            self.assertAlmostEqual((1-2*s)-(1-2*prev), 0.01)
+        # Both paths start at the same TOP centre and continue to the
+        # BOTTOM centre. Pin strokeStart to zero, trim only the endpoint.
+        self.assertIn('layer.strokeStart = 0.0;', TWEAK)
+        self.assertIn('layer.strokeEnd = progress;', TWEAK)
+        self.assertIn('IBNLeft.strokeStart = 0.0;', TWEAK)
+        self.assertIn('IBNRight.strokeStart = 0.0;', TWEAK)
+        self.assertIn('IBNLeft.strokeEnd = progress;', TWEAK)
+        self.assertIn('IBNRight.strokeEnd = progress;', TWEAK)
+        self.assertNotIn('strokeStart = trim;', TWEAK)
+        self.assertNotIn('strokeEnd = 1.0 - trim;', TWEAK)
+        # No 25%, 10% or other quantisation: precisely 1% more length
+        # for each percentage point across the full range.
+        for percent in range(1, 101):
+            previous = (percent - 1) / 100.0
+            current = percent / 100.0
+            self.assertAlmostEqual(current - previous, 0.01)
+        self.assertEqual(0 / 100.0, 0.0)   # 0%: no arc
+        self.assertEqual(100 / 100.0, 1.0) # 100%: joined top and bottom
     def test_colour_bands(self):
         for p in range(101):
             band = "red" if p <= 20 else ("yellow" if p <= 60 else "green")
