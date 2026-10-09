@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.18 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.19 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -84,7 +84,12 @@ static const CGFloat IBNRecordingOffsetX = 0.0;
 // Once the countdown becomes an active recording, the red-dot Island
 // contracts. The proven narrow geometry follows its visible perimeter.
 // This does not alter the Lock Screen's independently stable profile.
-static const CGFloat IBNActiveRecordingWidth = 164.0;
+// Fine alignment for the red-dot capsule (distinct from countdown):
+// the previous arc was slightly inside the curved left/right sides and
+// too high on the top. Widen 3pt, lower the top 1.5pt, keep bottom fixed.
+static const CGFloat IBNActiveRecordingWidth = 167.0;
+static const CGFloat IBNActiveRecordingHeight = 32.5;
+static const CGFloat IBNActiveRecordingTop = 14.0;
 static const CGFloat IBNActiveRecordingOffsetX = -3.0;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
@@ -108,6 +113,9 @@ static BOOL IBNRecordingStateKnown = NO;
 static BOOL IBNLastCaptured = NO;
 static BOOL IBNRecordingExpanded = NO;
 static NSUInteger IBNRecordingTransition = 0;
+// Hide BOTH rendering paths for two full seconds after capture stops, so
+// iOS's recording-saved Dynamic Island banner appears unobstructed.
+static BOOL IBNRecordingStopIntermission = NO;
 // Separate countdown phase: ReplayKit's "sessionIsStarting" occurs when
 // Control Centre starts the 3-second countdown, before UIScreen.isCaptured.
 static BOOL IBNCountdownExpanded = NO;
@@ -173,18 +181,23 @@ static void IBNUpdateScreenCaptureState(void) {
     if (captured) {
         // Expand immediately once iOS confirms capture has started.
         IBNRecordingExpanded = YES;
+        IBNRecordingStopIntermission = NO; // Cancel old post-stop blackout.
         // Capture has started; recording state takes over from countdown.
         IBNCountdownExpanded = NO;
         ++IBNCountdownToken;
         IBNNeedsFullRedraw = YES;
         return;
     }
-    // On stop, retain enlarged outline for one second, then return to
-    // resting size unless capture restarted or the Lock Screen is visible.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+    // On stop, hide the arcs instantly for two seconds while iOS displays
+    // its own recording-saved banner. Geometry can safely return to the
+    // resting profile while hidden, so it reappears already aligned.
+    IBNRecordingStopIntermission = YES;
+    IBNRecordingExpanded = NO;
+    IBNNeedsFullRedraw = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;
-        IBNRecordingExpanded = NO;
+        IBNRecordingStopIntermission = NO;
         IBNNeedsFullRedraw = YES;
         IBNRefresh();
     });
@@ -368,8 +381,8 @@ static BOOL IBNRecordingOutlineProfile(void) {
     return !IBNLastDetectedLockScreen && (IBNCountdownExpanded || IBNRecordingExpanded);
 }
 static BOOL IBNActiveRecordingOutlineProfile(void) {
-    // IBNRecordingExpanded also stays true during the requested 1-second
-    // grace period after recording stops, preserving the contracted outline.
+    // The red-dot profile is active only while capture is ongoing.
+    // After stopping, arcs are hidden for 2 seconds and return at rest size.
     return !IBNLastDetectedLockScreen && IBNRecordingExpanded;
 }
 static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL expanded) {
@@ -377,8 +390,8 @@ static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL expanded) {
     BOOL activeRecording = IBNActiveRecordingOutlineProfile();
     CGFloat width = activeRecording ? IBNActiveRecordingWidth :
                     (countdownOrRecording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth));
-    CGFloat height = expanded ? IBNLockHeight : IBNHeight;
-    CGFloat top = expanded ? IBNLockTop : IBNTop;
+    CGFloat height = activeRecording ? IBNActiveRecordingHeight : (expanded ? IBNLockHeight : IBNHeight);
+    CGFloat top = activeRecording ? IBNActiveRecordingTop : (expanded ? IBNLockTop : IBNTop);
     CGFloat xOffset = activeRecording ? IBNActiveRecordingOffsetX :
                       (countdownOrRecording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0));
     return CGRectMake((portraitWidth - width) / 2.0 + xOffset, top, width, height);
@@ -499,10 +512,12 @@ static CGRect IBNNativeRect(UIWindow *window) {
         BOOL activeRecording = IBNActiveRecordingOutlineProfile();
         CGFloat width = activeRecording ? IBNActiveRecordingWidth :
                         (countdownOrRecording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth));
-        CGFloat height = expanded ? IBNLockHeight : IBNHeight;
+        CGFloat height = activeRecording ? IBNActiveRecordingHeight : (expanded ? IBNLockHeight : IBNHeight);
         CGFloat offset = activeRecording ? IBNActiveRecordingOffsetX :
                          (countdownOrRecording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0));
-        return CGRectMake((w - width)/2 + offset, (h - height)/2, width, height);
+        // Reduce height only at the top, keeping the bottom edge steady.
+        CGFloat yOffset = activeRecording ? 0.75 : 0.0;
+        return CGRectMake((w - width)/2 + offset, (h - height)/2 + yOffset, width, height);
     }
     return CGRectNull;
 }
@@ -592,7 +607,7 @@ static BOOL IBNRenderSystemAperture(void) {
             // the bottom-centre end as the battery level decreases.
             layer.strokeStart = 0.0;
             layer.strokeEnd = progress;
-            layer.hidden = (percent == 0 || IBNChargingIntermission);
+            layer.hidden = (percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission);
             IBNUpdateChargingPulse(layer);
             // A later inserted native subview must not cover our arcs.
             if (layer.superlayer == window.layer && window.layer.sublayers.lastObject != layer) {
@@ -651,7 +666,7 @@ static void IBNRefresh(void) {
         || (IBNLastThickness != IBNThickness);
     BOOL colorChanged = IBNNeedsFullRedraw || !IBNLastColor || !CGColorEqualToColor(IBNLastColor, color.CGColor);
     if (!geomChanged && !colorChanged && IBNLastPercent == percent &&
-        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission)) return;
+        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission)) return;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (geomChanged) {
@@ -686,8 +701,8 @@ static void IBNRefresh(void) {
     IBNRight.strokeStart = 0.0;
     IBNLeft.strokeEnd = progress;
     IBNRight.strokeEnd = progress;
-    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;
-    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;
+    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission;
+    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission;
     IBNUpdateChargingPulse(IBNLeft);
     IBNUpdateChargingPulse(IBNRight);
     [CATransaction commit];

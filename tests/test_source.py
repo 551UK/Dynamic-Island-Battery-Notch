@@ -148,7 +148,7 @@ class SourceTests(unittest.TestCase):
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
 
     def test_capture_end_wait_one_second(self):
-        self.assertIn('(int64_t)(1.0 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('(int64_t)(2.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('NSUInteger transition = ++IBNRecordingTransition;', TWEAK)
         self.assertIn('if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;', TWEAK)
         self.assertIn('IBNRecordingExpanded = NO;', TWEAK)
@@ -188,7 +188,9 @@ class SourceTests(unittest.TestCase):
         # v0.2.17 screenshots; active recording contracts to fit the red dot.
         self.assertIn('static const CGFloat IBNRecordingWidth = 180.0;', TWEAK)
         self.assertIn('static const CGFloat IBNRecordingOffsetX = 0.0;', TWEAK)
-        self.assertIn('static const CGFloat IBNActiveRecordingWidth = 164.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingWidth = 167.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingHeight = 32.5;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingTop = 14.0;', TWEAK)
         self.assertIn('static const CGFloat IBNActiveRecordingOffsetX = -3.0;', TWEAK)
         self.assertIn('static const CGFloat IBNLockWidth = 164.0;', TWEAK)
         self.assertIn('static const CGFloat IBNLockOffsetX = -3.0;', TWEAK)
@@ -210,7 +212,9 @@ class SourceTests(unittest.TestCase):
         self.assertIn('IBNRecordingExpanded = YES;', TWEAK)
         self.assertIn('IBNCountdownExpanded = NO;', TWEAK)
         self.assertIn('- (void)sessionIsStarting {', TWEAK)
-        self.assertIn('(int64_t)(1.0 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('(int64_t)(2.0 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('IBNRecordingStopIntermission = YES;', TWEAK)
+        self.assertIn('IBNRecordingStopIntermission = NO;', TWEAK)
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
 
     def test_charging_pulse_opt_in_and_linear(self):
@@ -236,6 +240,31 @@ class SourceTests(unittest.TestCase):
         cells=plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         s=next(c for c in cells if c.get("key")=="pulseCharging")
         self.assertFalse(s["default"])
+
+    def test_recording_stop_hides_both_paths_for_two_seconds(self):
+        # Do not reuse the charging intermission: capture and charging can
+        # overlap, and both independently hide their arcs while active.
+        self.assertIn('static BOOL IBNRecordingStopIntermission = NO;', TWEAK)
+        self.assertIn('IBNRecordingStopIntermission = YES;', TWEAK)
+        self.assertIn('IBNRecordingExpanded = NO;', TWEAK)
+        self.assertIn('(int64_t)(2.0 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;', TWEAK)
+        self.assertIn('IBNRecordingStopIntermission = NO;', TWEAK)
+        self.assertIn('layer.hidden = (percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission);', TWEAK)
+        self.assertIn('IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission;', TWEAK)
+        self.assertIn('IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission;', TWEAK)
+        # Charging retains its independent existing three-second delay.
+        self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)
+
+    def test_active_recording_position_changes_only_this_profile(self):
+        self.assertIn('static const CGFloat IBNActiveRecordingWidth = 167.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingHeight = 32.5;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingTop = 14.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNRecordingWidth = 180.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNLockWidth = 164.0;', TWEAK)
+        self.assertIn('CGFloat top = activeRecording ? IBNActiveRecordingTop :', TWEAK)
+        self.assertIn('CGFloat yOffset = activeRecording ? 0.75 : 0.0;', TWEAK)
+        self.assertIn('IBNRecordingStopIntermission', TWEAK)
 
     def test_thickness_floor_1_5(self):
         self.assertIn("IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8)", TWEAK)
