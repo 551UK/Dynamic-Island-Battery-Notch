@@ -9,7 +9,9 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
 
 @interface IBNRootListController () <UIColorPickerViewControllerDelegate>
 @end
-@implementation IBNRootListController
+@implementation IBNRootListController {
+    NSString *_activeColourKey;
+}
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Island Battery Notch";
@@ -63,17 +65,21 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     PSSpecifier *colGroup = [PSSpecifier groupSpecifierWithName:@"Colours"];
     [colGroup setProperty:@"0–20% red, 21–60% yellow, 61–100% green. Turn off automatic colours to use the manual colour." forKey:@"footerText"];
     [items addObject:colGroup];
-    PSSpecifier *picker = [PSSpecifier preferenceSpecifierNamed:@"Manual outline colour"
+    PSSpecifier *picker = [PSSpecifier preferenceSpecifierNamed:@"Manual Outline Colour"
                          target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
     [picker setButtonAction:@selector(openColourPicker)];
     [items addObject:picker];
-    PSSpecifier *pos = [PSSpecifier groupSpecifierWithName:@"Island alignment"];
-    [pos setProperty:@"Adjust the resting Dynamic Island outline on your iPhone 14 Pro Max." forKey:@"footerText"];
-    [items addObject:pos];
-    [self addSlider:items name:@"Width" key:@"width" value:126 min:110 max:150];
-    [self addSlider:items name:@"Height" key:@"height" value:37.33 min:30 max:50];
-    [self addSlider:items name:@"Top offset" key:@"offsetY" value:11 min:0 max:30];
-    [self addSlider:items name:@"Line thickness" key:@"thickness" value:2.5 min:0.5 max:8];
+    PSSpecifier *chargingGroup = [PSSpecifier groupSpecifierWithName:@"Charging"];
+    [chargingGroup setProperty:@"Choose the colour used whenever your phone is connected to power, including when fully charged. This overrides the normal colour while plugged in." forKey:@"footerText"];
+    [items addObject:chargingGroup];
+    PSSpecifier *chargingPicker = [PSSpecifier preferenceSpecifierNamed:@"Charging Colour"
+                         target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+    [chargingPicker setButtonAction:@selector(openChargingColourPicker)];
+    [items addObject:chargingPicker];
+    PSSpecifier *thicknessGroup = [PSSpecifier groupSpecifierWithName:@"Line Thickness"];
+    [thicknessGroup setProperty:@"Increase or decrease the outline thickness around the Island. Its position, height and width are fixed." forKey:@"footerText"];
+    [items addObject:thicknessGroup];
+    [self addSlider:items name:@"Line Thickness" key:@"thickness" value:2.5 min:0.5 max:8];
     PSSpecifier *about = [PSSpecifier groupSpecifierWithName:@"About"];
     [items addObject:about];
     PSSpecifier *repo = [PSSpecifier preferenceSpecifierNamed:@"Project on GitHub"
@@ -83,31 +89,42 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     _specifiers = [items copy];
     return _specifiers;
 }
-- (NSString *)currentHex {
+- (NSString *)currentHexForKey:(NSString *)key {
     CFPreferencesAppSynchronize((__bridge CFStringRef)IBNDomain);
-    CFPropertyListRef value = CFPreferencesCopyAppValue(CFSTR("fixedColor"), (__bridge CFStringRef)IBNDomain);
+    CFPropertyListRef value = CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)IBNDomain);
     id obj = value ? CFBridgingRelease(value) : nil;
-    return [obj isKindOfClass:NSString.class] ? obj : @"#30D158";
+    NSString *fallback = [key isEqualToString:@"chargingColor"] ? @"#00D7FF" : @"#30D158";
+    return [obj isKindOfClass:NSString.class] ? obj : fallback;
 }
-- (void)openColourPicker {
-    NSString *hex = [self currentHex];
+- (void)openPickerForKey:(NSString *)key {
+    _activeColourKey = [key copy];
+    NSString *hex = [self currentHexForKey:key];
     if ([hex hasPrefix:@"#"]) hex = [hex substringFromIndex:1];
-    unsigned int rgb=0;
-    if (hex.length != 6 || ![[NSScanner scannerWithString:hex] scanHexInt:&rgb]) rgb=0x30D158;
+    unsigned int rgb = [key isEqualToString:@"chargingColor"] ? 0x00D7FF : 0x30D158;
+    if (hex.length == 6) {
+        unsigned int candidate = 0;
+        NSScanner *scanner = [NSScanner scannerWithString:hex];
+        if ([scanner scanHexInt:&candidate] && scanner.isAtEnd) rgb = candidate;
+    }
     UIColorPickerViewController *picker = [UIColorPickerViewController new];
     picker.supportsAlpha = NO;
+    picker.title = [key isEqualToString:@"chargingColor"] ? @"Charging Colour" : @"Manual Outline Colour";
     picker.selectedColor = [UIColor colorWithRed:((rgb>>16)&255)/255.0
            green:((rgb>>8)&255)/255.0 blue:(rgb&255)/255.0 alpha:1];
     picker.delegate = self;
     [self presentViewController:picker animated:YES completion:nil];
 }
+- (void)openColourPicker { [self openPickerForKey:@"fixedColor"]; }
 - (void)openColourPicker:(id)sender { [self openColourPicker]; }
+- (void)openChargingColourPicker { [self openPickerForKey:@"chargingColor"]; }
+- (void)openChargingColourPicker:(id)sender { [self openChargingColourPicker]; }
 - (void)colorPickerViewControllerDidSelectColor:(UIColorPickerViewController *)picker {
     CGFloat r=0,g=0,b=0,a=0;
     if (![picker.selectedColor getRed:&r green:&g blue:&b alpha:&a]) return;
     NSString *hex=[NSString stringWithFormat:@"#%02X%02X%02X",
          (unsigned)lrint(r*255), (unsigned)lrint(g*255), (unsigned)lrint(b*255)];
-    CFPreferencesSetAppValue(CFSTR("fixedColor"), (__bridge CFPropertyListRef)hex, (__bridge CFStringRef)IBNDomain);
+    NSString *key = _activeColourKey ?: @"fixedColor";
+    CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)hex, (__bridge CFStringRef)IBNDomain);
     [self notifyChange];
 }
 - (void)openGitHub {

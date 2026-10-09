@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.1 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.2 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Two mirrored halves each lose 1% length on every reported 1% battery drop.
 #import <UIKit/UIKit.h>
@@ -51,11 +51,13 @@ static NSString *const IBNDomain = @"com.551.islandbatterynotch";
 static NSString *const IBNNotify = @"com.551.islandbatterynotch/preferences.changed";
 static BOOL IBNEnabled = YES;
 static BOOL IBNAutomaticColor = YES;
-static CGFloat IBNWidth = 126.0;
-static CGFloat IBNHeight = 37.33;
-static CGFloat IBNTop = 11.0;
+// The iPhone 14 Pro Max alignment is fixed; only stroke thickness is adjustable.
+static const CGFloat IBNWidth = 126.0;
+static const CGFloat IBNHeight = 37.33;
+static const CGFloat IBNTop = 11.0;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
+static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default cyan)
 
 // iOS draws the real Dynamic Island in an elevated system window. The original
 // auxiliary SpringBoard window can end up BEHIND foreground applications, so
@@ -87,30 +89,30 @@ static void IBNLoadPreferences(void) {
     IBNEnabled = value ? [value boolValue] : YES;
     value = IBNRead(@"autoColor");
     IBNAutomaticColor = value ? [value boolValue] : YES;
-    value = IBNRead(@"width");
-    IBNWidth = IBNClamp(value ? [value doubleValue] : 126, 110, 150);
-    value = IBNRead(@"height");
-    IBNHeight = IBNClamp(value ? [value doubleValue] : 37.33, 30, 50);
-    value = IBNRead(@"offsetY");
-    IBNTop = IBNClamp(value ? [value doubleValue] : 11, 0, 30);
     value = IBNRead(@"thickness");
     IBNThickness = IBNClamp(value ? [value doubleValue] : 2.5, 0.5, 8);
     value = IBNRead(@"fixedColor");
     IBNFixedHex = [value isKindOfClass:NSString.class] ? [value copy] : @"#30D158";
+    value = IBNRead(@"chargingColor");
+    IBNChargingHex = [value isKindOfClass:NSString.class] ? [value copy] : @"#00D7FF";
 }
-static UIColor *IBNManualColor(void) {
-    NSString *hex = [IBNFixedHex stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+static UIColor *IBNColorFromHex(NSString *value, UIColor *fallback) {
+    NSString *hex = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if ([hex hasPrefix:@"#"]) hex = [hex substringFromIndex:1];
-    if (hex.length != 6) return UIColor.systemGreenColor;
+    if (hex.length != 6) return fallback;
     unsigned rgb = 0;
     NSScanner *scanner = [NSScanner scannerWithString:hex];
-    if (![scanner scanHexInt:&rgb] || !scanner.isAtEnd) return UIColor.systemGreenColor;
+    if (![scanner scanHexInt:&rgb] || !scanner.isAtEnd) return fallback;
     return [UIColor colorWithRed:((rgb >> 16) & 255) / 255.0
                            green:((rgb >> 8) & 255) / 255.0
                             blue:(rgb & 255) / 255.0 alpha:1];
 }
 static UIColor *IBNColorForPercent(NSInteger percent) {
-    if (!IBNAutomaticColor) return IBNManualColor();
+    // While connected to power, charging colour always overrides percentage and manual/auto modes.
+    UIDeviceBatteryState state = UIDevice.currentDevice.batteryState;
+    if (state == UIDeviceBatteryStateCharging || state == UIDeviceBatteryStateFull)
+        return IBNColorFromHex(IBNChargingHex, UIColor.cyanColor);
+    if (!IBNAutomaticColor) return IBNColorFromHex(IBNFixedHex, UIColor.systemGreenColor);
     if (percent <= 20) return [UIColor colorWithRed:1 green:69.0 / 255 blue:58.0 / 255 alpha:1];
     if (percent <= 60) return [UIColor colorWithRed:1 green:214.0 / 255 blue:10.0 / 255 alpha:1];
     return [UIColor colorWithRed:48.0 / 255 green:209.0 / 255 blue:88.0 / 255 alpha:1];
