@@ -114,19 +114,23 @@ jobs:
             gh release create v0.2.30 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.30" --notes-file /dev/null
           fi
 
-      - name: Remove previous DEBs and extra branches
+      - name: Keep only the latest release and main branch
+        # Remove old RELEASE ENTRIES too, not just their .deb attachments:
+        # otherwise they still appear in GitHub's Releases sidebar.
+        # Preserve historical Git tags/commits and the current v0.2.30 DEB.
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | select(.tag_name != "v0.2.30") | .assets[] | select(.name | endswith(".deb")) | .id' \
-            > "$RUNNER_TEMP/old-deb-ids.txt"
-          while IFS= read -r asset_id; do
-            test -n "$asset_id" || continue
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}"
-          done < "$RUNNER_TEMP/old-deb-ids.txt"
+            --jq '.[] | select(.tag_name != "v0.2.30") | .id' \
+            > "$RUNNER_TEMP/old-releases.txt"
+          while IFS= read -r release_id; do
+            test -n "$release_id" || continue
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+            echo "Removed old release ${release_id}"
+          done < "$RUNNER_TEMP/old-releases.txt"
 
           gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100" \
             --jq '.[] | select(.name != "main") | .name' \
@@ -136,4 +140,4 @@ jobs:
             gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}"
           done < "$RUNNER_TEMP/old-branches.txt"
 
-          echo "Current v0.2.30 DEB and main branch retained."
+          echo "Kept only v0.2.30 in Releases and main as the only branch."
