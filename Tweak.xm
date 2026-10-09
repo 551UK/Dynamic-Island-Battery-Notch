@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.17 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.18 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -78,8 +78,14 @@ static const CGFloat IBNLockHeight = 34.0;
 static const CGFloat IBNLockTop = 12.5;
 static const CGFloat IBNLockOffsetX = -3.0;
 // Recording expands more than Lock Screen; leave the proven Lock Screen untouched.
+// Countdown: the black Island is approximately 180pt wide and centred.
 static const CGFloat IBNRecordingWidth = 180.0;
 static const CGFloat IBNRecordingOffsetX = 0.0;
+// Once the countdown becomes an active recording, the red-dot Island
+// contracts. The proven narrow geometry follows its visible perimeter.
+// This does not alter the Lock Screen's independently stable profile.
+static const CGFloat IBNActiveRecordingWidth = 164.0;
+static const CGFloat IBNActiveRecordingOffsetX = -3.0;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
 static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default cyan)
@@ -361,12 +367,20 @@ static void IBNUpdateChargingTransition(void) {
 static BOOL IBNRecordingOutlineProfile(void) {
     return !IBNLastDetectedLockScreen && (IBNCountdownExpanded || IBNRecordingExpanded);
 }
+static BOOL IBNActiveRecordingOutlineProfile(void) {
+    // IBNRecordingExpanded also stays true during the requested 1-second
+    // grace period after recording stops, preserving the contracted outline.
+    return !IBNLastDetectedLockScreen && IBNRecordingExpanded;
+}
 static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL expanded) {
-    BOOL recording = IBNRecordingOutlineProfile();
-    CGFloat width = recording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth);
+    BOOL countdownOrRecording = IBNRecordingOutlineProfile();
+    BOOL activeRecording = IBNActiveRecordingOutlineProfile();
+    CGFloat width = activeRecording ? IBNActiveRecordingWidth :
+                    (countdownOrRecording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth));
     CGFloat height = expanded ? IBNLockHeight : IBNHeight;
     CGFloat top = expanded ? IBNLockTop : IBNTop;
-    CGFloat xOffset = recording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0);
+    CGFloat xOffset = activeRecording ? IBNActiveRecordingOffsetX :
+                      (countdownOrRecording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0));
     return CGRectMake((portraitWidth - width) / 2.0 + xOffset, top, width, height);
 }
 static void IBNQueueLockRefresh(void) {
@@ -481,10 +495,13 @@ static CGRect IBNNativeRect(UIWindow *window) {
     }
     if (w >= 100 && h >= 25 && h < 130) {
         BOOL expanded = IBNUseExpandedOutline();
-        BOOL recording = IBNRecordingOutlineProfile();
-        CGFloat width = recording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth);
+        BOOL countdownOrRecording = IBNRecordingOutlineProfile();
+        BOOL activeRecording = IBNActiveRecordingOutlineProfile();
+        CGFloat width = activeRecording ? IBNActiveRecordingWidth :
+                        (countdownOrRecording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth));
         CGFloat height = expanded ? IBNLockHeight : IBNHeight;
-        CGFloat offset = recording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0);
+        CGFloat offset = activeRecording ? IBNActiveRecordingOffsetX :
+                         (countdownOrRecording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0));
         return CGRectMake((w - width)/2 + offset, (h - height)/2, width, height);
     }
     return CGRectNull;

@@ -183,14 +183,35 @@ class SourceTests(unittest.TestCase):
         self.assertIn('(int64_t)(1.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)  # unchanged charging pause
 
-    def test_recording_uses_wider_centre_profile_only(self):
+    def test_screen_recording_uses_two_phases(self):
+        # Exact same 180pt centred countdown shape as the confirmed-good
+        # v0.2.17 screenshots; active recording contracts to fit the red dot.
         self.assertIn('static const CGFloat IBNRecordingWidth = 180.0;', TWEAK)
         self.assertIn('static const CGFloat IBNRecordingOffsetX = 0.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingWidth = 164.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingOffsetX = -3.0;', TWEAK)
         self.assertIn('static const CGFloat IBNLockWidth = 164.0;', TWEAK)
         self.assertIn('static const CGFloat IBNLockOffsetX = -3.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNWidth = 126.0;', TWEAK)
+        self.assertIn('static BOOL IBNActiveRecordingOutlineProfile(void)', TWEAK)
+        self.assertIn('return !IBNLastDetectedLockScreen && IBNRecordingExpanded;', TWEAK)
         self.assertIn('return !IBNLastDetectedLockScreen && (IBNCountdownExpanded || IBNRecordingExpanded);', TWEAK)
-        self.assertIn('recording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth)', TWEAK)
-        self.assertIn('recording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0)', TWEAK)
+        self.assertIn('activeRecording ? IBNActiveRecordingWidth :', TWEAK)
+        self.assertIn('(countdownOrRecording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth))', TWEAK)
+        self.assertIn('activeRecording ? IBNActiveRecordingOffsetX :', TWEAK)
+        self.assertIn('(countdownOrRecording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0))', TWEAK)
+        # Both full-screen and compact native windows must select the same
+        # profile or one state will draw an offset/mis-sized line.
+        self.assertEqual(TWEAK.count('BOOL activeRecording = IBNActiveRecordingOutlineProfile();'), 2)
+        self.assertEqual(TWEAK.count('activeRecording ? IBNActiveRecordingWidth :'), 2)
+        # Existing public capture notification switches phases, while the
+        # guarded ReplayKit callback preserves early countdown expansion.
+        self.assertIn('UIScreenCapturedDidChangeNotification', TWEAK)
+        self.assertIn('IBNRecordingExpanded = YES;', TWEAK)
+        self.assertIn('IBNCountdownExpanded = NO;', TWEAK)
+        self.assertIn('- (void)sessionIsStarting {', TWEAK)
+        self.assertIn('(int64_t)(1.0 * NSEC_PER_SEC)', TWEAK)
+        self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
 
     def test_charging_pulse_opt_in_and_linear(self):
         self.assertIn('static BOOL IBNPulseCharging = NO;', TWEAK)
