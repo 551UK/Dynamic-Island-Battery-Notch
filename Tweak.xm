@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.10 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.11 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -120,7 +120,7 @@ static void IBNLoadPreferences(void) {
     value = IBNRead(@"autoColor");
     IBNAutomaticColor = value ? [value boolValue] : YES;
     value = IBNRead(@"thickness");
-    IBNThickness = IBNClamp(value ? [value doubleValue] : 2.5, 0.5, 8);
+    IBNThickness = IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8);
     value = IBNRead(@"fixedColor");
     IBNFixedHex = [value isKindOfClass:NSString.class] ? [value copy] : @"#30D158";
     value = IBNRead(@"chargingColor");

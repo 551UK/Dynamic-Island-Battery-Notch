@@ -22,7 +22,12 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     if (!key) return def;
     CFPreferencesAppSynchronize((__bridge CFStringRef)IBNDomain);
     CFPropertyListRef stored = CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)IBNDomain);
-    return stored ? CFBridgingRelease(stored) : def;
+    id result = stored ? CFBridgingRelease(stored) : def;
+    // Clamp preferences saved by older versions too, so Settings never
+    // displays a thickness below the new physical minimum of 1.5 pt.
+    if ([key isEqualToString:@"thickness"] && [result respondsToSelector:@selector(doubleValue)])
+        return @(MAX(1.5, MIN(8.0, [result doubleValue])));
+    return result;
 }
 - (void)notifyChange {
     CFPreferencesAppSynchronize((__bridge CFStringRef)IBNDomain);
@@ -32,6 +37,8 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
     if (!key) return;
+    if ([key isEqualToString:@"thickness"] && [value respondsToSelector:@selector(doubleValue)])
+        value = @(MAX(1.5, MIN(8.0, [value doubleValue])));
     CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value,
                              (__bridge CFStringRef)IBNDomain);
     [self notifyChange];
@@ -77,9 +84,9 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     [chargingPicker setButtonAction:@selector(openChargingColourPicker)];
     [items addObject:chargingPicker];
     PSSpecifier *thicknessGroup = [PSSpecifier groupSpecifierWithName:@"Line Thickness"];
-    [thicknessGroup setProperty:@"Increase or decrease the VISIBLE outline thickness outside the Island. The original position and shape remain fixed." forKey:@"footerText"];
+    [thicknessGroup setProperty:@"Minimum 1.5 pt (slider fully left), up to 8 pt. The Island position and shape remain fixed." forKey:@"footerText"];
     [items addObject:thicknessGroup];
-    [self addSlider:items name:@"Line Thickness" key:@"thickness" value:2.5 min:0.5 max:8];
+    [self addSlider:items name:@"Line Thickness" key:@"thickness" value:2.5 min:1.5 max:8];
     PSSpecifier *about = [PSSpecifier groupSpecifierWithName:@"About"];
     [items addObject:about];
     PSSpecifier *repo = [PSSpecifier preferenceSpecifierNamed:@"Project on GitHub"

@@ -1,5 +1,9 @@
 # Dynamic Island Battery Notch
 
+## Experimental v0.2.11 — line thickness minimum
+
+The **Line Thickness** slider now starts at **1.5 pt** (fully left), can increase to **8 pt**, and defaults to **2.5 pt**. Existing saved values below 1.5 are clamped in both Settings and the drawing code. No change to Lock Screen alignment or colouring, and no additional hooks. Includes v0.2.10's native charge-popup wait and Lock Screen detection changes.
+
 ## Experimental v0.2.10 — Lock Screen alignment detection and charging popup
 
 Corrects the Lock Screen-only size decision: `SBUIProudLockIconView` is already mounted and coloured successfully in v0.2.9, but its secure hosting-window ancestor could report hidden, causing v0.2.9 to choose the Home Screen-sized outline. v0.2.10 examines the lock view's own attachment and on-screen bounds instead, without adding any private lock-manager hook. The locked geometry remains 164 × 34 pt, offset slightly left; Home Screen/apps remain 126 × 37.33 pt.

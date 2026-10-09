@@ -43,7 +43,7 @@ class SourceTests(unittest.TestCase):
         self.assertNotIn('CGRectInset(rect, IBNThickness / 2, IBNThickness / 2)', TWEAK)
         # With outward drawing, the original pill remains the INNER border
         # while the visible OUTER edge changes by exactly the thickness.
-        for thickness in (0.5, 1, 2.5, 4, 8):
+        for thickness in (1.5, 2.5, 4, 8):
             original_top = 11.0
             original_bottom = 11.0 + 37.33
             path_top = original_top - thickness / 2
@@ -98,6 +98,18 @@ class SourceTests(unittest.TestCase):
         self.assertIn("IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen)", TWEAK)
         self.assertIn("static const CGFloat IBNLockWidth = 164.0;", TWEAK)
         self.assertIn("static const CGFloat IBNWidth = 126.0;", TWEAK)
+
+    def test_thickness_floor_1_5(self):
+        self.assertIn("IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8)", TWEAK)
+        pref = (ROOT / "prefs/IBNRootListController.m").read_text()
+        self.assertIn('name:@"Line Thickness" key:@"thickness" value:2.5 min:1.5 max:8', pref)
+        self.assertIn('MAX(1.5, MIN(8.0, [result doubleValue]))', pref)
+        self.assertIn('MAX(1.5, MIN(8.0, [value doubleValue]))', pref)
+        root = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
+        slider = next(s for s in root if s.get("key") == "thickness")
+        self.assertEqual(slider["min"], 1.5)
+        self.assertEqual(slider["max"], 8)
+        self.assertEqual(slider["default"], 2.5)
 
     def test_settings(self):
         data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
