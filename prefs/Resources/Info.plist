@@ -9,5 +9,5 @@
 <key>CFBundleIconFile</key><string>icon.png</string>
 <key>MinimumOSVersion</key><string>16.0</string>
 <key>CFBundlePackageType</key><string>BNDL</string>
-<key>CFBundleShortVersionString</key><string>0.2.26</string>
+<key>CFBundleShortVersionString</key><string>0.2.29</string>
 </dict></plist>

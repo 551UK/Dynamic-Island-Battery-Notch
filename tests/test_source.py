@@ -349,7 +349,7 @@ class SourceTests(unittest.TestCase):
         self.assertIn('<p align="center">', readme)
         self.assertIn('assets/made-by-551UK.svg', readme)
         svg = (ROOT / 'assets/made-by-551UK.svg').read_text()
-        self.assertIn('made by 551UK', svg)
+        self.assertIn('Made by 551UK', svg)
         self.assertIn('fill="#8b949e"', svg)
         workflow = (ROOT / '.github/workflows/build.yml').read_text()
         self.assertIn('Generate Settings icon', workflow)
@@ -391,6 +391,40 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(TWEAK.count('(int64_t)(5.0 * NSEC_PER_SEC)'), 1)
         self.assertEqual(TWEAK.count('(int64_t)(6.0 * NSEC_PER_SEC)'), 1)
         self.assertEqual(TWEAK.count('(int64_t)(3.0 * NSEC_PER_SEC)'), 1)
+
+    def test_settings_groups_credit_and_centered_github(self):
+        prefs = (ROOT / "prefs/IBNRootListController.m").read_text()
+        root = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
+        # The automatic-colours threshold message belongs to the preceding
+        # switch's group, with a new footer-free manual colour section.
+        note = "0–20% red, 21–60% yellow, 61–100% green. Turn off automatic colours to use the manual colour."
+        self.assertIn('[group setProperty:@"' + note + '" forKey:@"footerText"];', prefs)
+        self.assertLess(prefs.index('name:@"Automatic battery colours"'), prefs.index('groupSpecifierWithName:@"Manual Colour"'))
+        self.assertLess(prefs.index('groupSpecifierWithName:@"Manual Colour"'), prefs.index('preferenceSpecifierNamed:@"Manual Outline Colour"'))
+        self.assertFalse(any("footerText" in s and s.get("label") == "MANUAL COLOUR" for s in root))
+        self.assertEqual(root[0]["footerText"], note)
+        self.assertEqual(root[3]["label"], "MANUAL COLOUR")
+        self.assertNotIn("Two mirrored outline arcs", prefs)
+        self.assertNotIn("Two mirrored outline arcs", (ROOT / "prefs/Resources/Root.plist").read_text())
+        self.assertIn('groupSpecifierWithName:@"NORMAL LINE THICKNESS"', prefs)
+        self.assertTrue(any(s.get("label") == "NORMAL LINE THICKNESS" for s in root))
+        # The centred link remains a clickable Preferences button. The grey
+        # attribution sits in a truly centred view below it.
+        self.assertIn('preferenceSpecifierNamed:@"Project on GitHub"', prefs)
+        self.assertIn('[repo setButtonAction:@selector(openGitHub)];', prefs)
+        self.assertIn('link.textAlignment = NSTextAlignmentCenter;', prefs)
+        self.assertIn('link.userInteractionEnabled = NO;', prefs)
+        self.assertIn('IBNHideLinkTextInView(cell.contentView);', prefs)
+        self.assertIn('credit.text = @"Made by 551UK";', prefs)
+        self.assertIn('credit.textColor = UIColor.secondaryLabelColor;', prefs)
+        self.assertIn('credit.textAlignment = NSTextAlignmentCenter;', prefs)
+        self.assertIn('[credit.centerXAnchor constraintEqualToAnchor:footer.centerXAnchor]', prefs)
+        self.assertTrue(any(s.get("footerText") == "Made by 551UK" for s in root))
+        self.assertEqual(root[-1]["label"], "Project on GitHub")
+        info = plistlib.loads((ROOT / "prefs/Resources/Info.plist").read_bytes())
+        self.assertEqual(info["CFBundleShortVersionString"], "0.2.29")
+        svg = (ROOT / "assets/made-by-551UK.svg").read_text()
+        self.assertIn('>Made by 551UK</text>', svg)
 
     def test_settings(self):
         data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())

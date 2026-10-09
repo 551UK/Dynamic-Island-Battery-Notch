@@ -77,13 +77,16 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     if (_specifiers) return _specifiers;
     NSMutableArray *items = [NSMutableArray array];
     PSSpecifier *group = [PSSpecifier groupSpecifierWithName:@"Battery progress"];
-    [group setProperty:@"Two mirrored outline arcs shrink on every reported 1% change. Visible on Lock Screen, Home Screen and inside apps." forKey:@"footerText"];
+    // The footer belongs to the group that ENDS with the automatic-colours
+    // switch, so it appears below that switch rather than the manual picker.
+    [group setProperty:@"0–20% red, 21–60% yellow, 61–100% green. Turn off automatic colours to use the manual colour." forKey:@"footerText"];
     [items addObject:group];
     [items addObject:[self prefNamed:@"Enabled" key:@"enabled" cell:PSSwitchCell defaultValue:@YES]];
     [items addObject:[self prefNamed:@"Automatic battery colours" key:@"autoColor" cell:PSSwitchCell defaultValue:@YES]];
-    PSSpecifier *colGroup = [PSSpecifier groupSpecifierWithName:@"Colours"];
-    [colGroup setProperty:@"0–20% red, 21–60% yellow, 61–100% green. Turn off automatic colours to use the manual colour." forKey:@"footerText"];
-    [items addObject:colGroup];
+    // A new footer-free section prevents the automatic colour note from
+    // being displayed underneath the Manual Outline Colour button.
+    PSSpecifier *manualGroup = [PSSpecifier groupSpecifierWithName:@"Manual Colour"];
+    [items addObject:manualGroup];
     PSSpecifier *picker = [PSSpecifier preferenceSpecifierNamed:@"Manual Outline Colour"
                          target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
     [picker setButtonAction:@selector(openColourPicker)];
@@ -100,11 +103,12 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     [chargingThicknessGroup setProperty:@"Increasing this makes the charging pulse look stronger. Your normal battery line thickness stays unchanged." forKey:@"footerText"];
     [items addObject:chargingThicknessGroup];
     [self addSlider:items name:@"Charging Line Thickness" key:@"chargingThickness" value:2.5 min:1.5 max:12];
-    PSSpecifier *thicknessGroup = [PSSpecifier groupSpecifierWithName:@"Line Thickness"];
+    PSSpecifier *thicknessGroup = [PSSpecifier groupSpecifierWithName:@"NORMAL LINE THICKNESS"];
     [thicknessGroup setProperty:@"Minimum 1.5 pt (slider fully left), up to 8 pt. The Island position and shape remain fixed." forKey:@"footerText"];
     [items addObject:thicknessGroup];
     [self addSlider:items name:@"Line Thickness" key:@"thickness" value:2.5 min:1.5 max:8];
     PSSpecifier *about = [PSSpecifier groupSpecifierWithName:@"About"];
+    [about setProperty:@"Made by 551UK" forKey:@"footerText"];
     [items addObject:about];
     PSSpecifier *repo = [PSSpecifier preferenceSpecifierNamed:@"Project on GitHub"
                    target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
@@ -112,6 +116,64 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     [items addObject:repo];
     _specifiers = [items copy];
     return _specifiers;
+}
+
+#pragma mark - Centre the About section without changing ordinary Preferences cells
+
+// The About section is deliberately last in -specifiers. A dedicated
+// centre-aligned overlay avoids dependence on PSButtonCell's native inset.
+static const NSInteger IBNGitHubTextTag = 551029;
+static void IBNHideLinkTextInView(UIView *view) {
+    if ([view isKindOfClass:UILabel.class]) {
+        UILabel *label = (UILabel *)view;
+        if (label.tag != IBNGitHubTextTag &&
+            [label.text isEqualToString:@"Project on GitHub"]) label.hidden = YES;
+    }
+    for (UIView *child in view.subviews) {
+        if (child.tag != IBNGitHubTextTag) IBNHideLinkTextInView(child);
+    }
+}
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    if (!cell || indexPath.section != tableView.numberOfSections - 1) return cell;
+    IBNHideLinkTextInView(cell.contentView);
+    UILabel *link = [cell.contentView viewWithTag:IBNGitHubTextTag];
+    if (!link) {
+        link = [[UILabel alloc] initWithFrame:cell.contentView.bounds];
+        link.tag = IBNGitHubTextTag;
+        link.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        link.backgroundColor = UIColor.clearColor;
+        link.textAlignment = NSTextAlignmentCenter;
+        link.userInteractionEnabled = NO; // Preserve PSButtonCell's tap action.
+        [cell.contentView addSubview:link];
+    }
+    link.text = @"Project on GitHub";
+    link.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    link.textColor = cell.tintColor;
+    return cell;
+}
+
+// Supply a genuinely centred, grey footer instead of relying on the
+// stock Preferences footer's left-aligned text container.
+- (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
+    if (section != tableView.numberOfSections - 1)
+        return [super tableView:tableView viewForFooterInSection:section];
+    UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, CGRectGetWidth(tableView.bounds), 36)];
+    footer.backgroundColor = UIColor.clearColor;
+    UILabel *credit = [UILabel new];
+    credit.text = @"Made by 551UK";
+    credit.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    credit.textColor = UIColor.secondaryLabelColor;
+    credit.textAlignment = NSTextAlignmentCenter;
+    credit.backgroundColor = UIColor.clearColor;
+    credit.translatesAutoresizingMaskIntoConstraints = NO;
+    [footer addSubview:credit];
+    [NSLayoutConstraint activateConstraints:@[
+        [credit.centerXAnchor constraintEqualToAnchor:footer.centerXAnchor],
+        [credit.centerYAnchor constraintEqualToAnchor:footer.centerYAnchor],
+        [credit.widthAnchor constraintLessThanOrEqualToAnchor:footer.widthAnchor constant:-24]
+    ]];
+    return footer;
 }
 - (NSString *)currentHexForKey:(NSString *)key {
     CFPreferencesAppSynchronize((__bridge CFStringRef)IBNDomain);

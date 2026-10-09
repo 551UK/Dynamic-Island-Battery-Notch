@@ -57,7 +57,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.28"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.29"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -108,10 +108,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.28 >/dev/null 2>&1; then
-            gh release upload v0.2.28 packages/*.deb --clobber
+          if gh release view v0.2.29 >/dev/null 2>&1; then
+            gh release upload v0.2.29 packages/*.deb --clobber
           else
-            gh release create v0.2.28 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.28" --notes "Add an independent Charging Line Thickness slider (1.5 to 12pt) with an explanation that thicker charging lines give a stronger-looking pulse. The existing normal line thickness, pulse timing, colour selection and power-on delay remain unchanged. Charging thickness defaults to the user's normal line thickness on upgrade. Retain the v0.2.27 recording-top correction, right-side clearance, 5-second recording-stop pause, and call hiding. Saved v0.2.14 working-base branch is untouched."
+            gh release create v0.2.29 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.29" --notes "Polish Settings labels and placement: centre Project on GitHub and the grey Made by 551UK footer; position colour thresholds directly below Automatic battery colours; remove outdated two-arcs wording; rename the normal thickness section to NORMAL LINE THICKNESS. No changes to the v0.2.28 battery rendering, charging pulse or recording geometry. Saved v0.2.14 working-base branch remains untouched."
           fi
 
       - name: Remove legacy DEB assets older than v0.2.14
