@@ -1,4 +1,4 @@
-// Dynamic Island Battery Notch v0.2.24 - rootless SpringBoard overlay, iOS 16.3
+// Dynamic Island Battery Notch v0.2.25 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -114,7 +114,7 @@ static BOOL IBNRecordingStateKnown = NO;
 static BOOL IBNLastCaptured = NO;
 static BOOL IBNRecordingExpanded = NO;
 static NSUInteger IBNRecordingTransition = 0;
-// Hide BOTH rendering paths for 4.5 seconds after capture stops, so
+// Hide BOTH rendering paths for 5 seconds after capture stops, so
 // iOS's recording-saved Dynamic Island banner appears unobstructed.
 static BOOL IBNRecordingStopIntermission = NO;
 // Separate countdown phase: ReplayKit's "sessionIsStarting" occurs when
@@ -218,13 +218,13 @@ static void IBNUpdateScreenCaptureState(void) {
         IBNNeedsFullRedraw = YES;
         return;
     }
-    // On stop, hide the arcs instantly for 4.5 seconds while iOS displays
+    // On stop, hide the arcs instantly for 5 seconds while iOS displays
     // its own recording-saved banner. Geometry can safely return to the
     // resting profile while hidden, so it reappears already aligned.
     IBNRecordingStopIntermission = YES;
     IBNRecordingExpanded = NO;
     IBNNeedsFullRedraw = YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.5 * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;
         IBNRecordingStopIntermission = NO;
@@ -281,11 +281,11 @@ static CGPathRef IBNHalfPath(CGRect r, BOOL left) {
     CGFloat radius = CGRectGetHeight(r) / 2.0;
     CGFloat centreX = CGRectGetMidX(r);
     CGFloat centreY = CGRectGetMidY(r);
-    // Trim only active recording's right-hand extension (2pt -> 0.5pt).
-    // It remains POSITIVE, on top of the already-working 2pt outward
-    // expanded-line clearance. Other Island states remain unchanged.
+    // Tiny active-recording adjustment only: add 0.25pt right-tip margin
+    // compared with v0.2.24. Preserve the 2pt expanded-stroke clearance,
+    // the left side and the separately verified Lock Screen/countdown sizes.
     CGFloat rightCapClearance = (!left && IBNRecordingExpanded &&
-                                !IBNLastDetectedLockScreen) ? 0.5 : 0.0;
+                                !IBNLastDetectedLockScreen) ? 0.75 : 0.0;
     CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r) + rightCapClearance;
     CGFloat arcX = left ? edgeX + radius : edgeX - radius;
     CGFloat sign = left ? -1.0 : 1.0;
@@ -417,7 +417,7 @@ static BOOL IBNRecordingOutlineProfile(void) {
 }
 static BOOL IBNActiveRecordingOutlineProfile(void) {
     // The red-dot profile is active only while capture is ongoing.
-    // After stopping, arcs are hidden for 4.5 seconds and return at rest size.
+    // After stopping, arcs are hidden for 5 seconds and return at rest size.
     return !IBNLastDetectedLockScreen && IBNRecordingExpanded;
 }
 static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL expanded) {

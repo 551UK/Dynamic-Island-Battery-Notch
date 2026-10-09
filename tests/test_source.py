@@ -79,8 +79,8 @@ class SourceTests(unittest.TestCase):
         self.assertIn("static void IBNUpdateChargingTransition(void)", TWEAK)
         self.assertIn("static BOOL IBNChargingIntermission = NO;", TWEAK)
         self.assertIn("(int64_t)(3.0 * NSEC_PER_SEC)", TWEAK)
-        # The recording-stop blackout is 4.5 seconds; charging is still three.
-        self.assertIn("(int64_t)(4.5 * NSEC_PER_SEC)", TWEAK)
+        # The recording-stop blackout is 5 seconds; charging is still three.
+        self.assertIn("(int64_t)(5.0 * NSEC_PER_SEC)", TWEAK)
         self.assertNotIn("(int64_t)(2.0 * NSEC_PER_SEC)", TWEAK)
         self.assertIn("if (connected == IBNPowerConnected) return;", TWEAK)
         self.assertIn("NSUInteger token = ++IBNPowerTransitionToken;", TWEAK)
@@ -148,8 +148,8 @@ class SourceTests(unittest.TestCase):
         self.assertNotIn('if (IBNLastDetectedLockScreen) {\n            for (CAShapeLayer *layer in pair) layer.hidden = YES;', TWEAK)
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
 
-    def test_capture_end_wait_four_point_five_seconds(self):
-        self.assertIn('(int64_t)(4.5 * NSEC_PER_SEC)', TWEAK)
+    def test_capture_end_wait_five_seconds(self):
+        self.assertIn('(int64_t)(5.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('NSUInteger transition = ++IBNRecordingTransition;', TWEAK)
         self.assertIn('if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;', TWEAK)
         self.assertIn('IBNRecordingExpanded = NO;', TWEAK)
@@ -174,14 +174,14 @@ class SourceTests(unittest.TestCase):
         self.assertNotIn('bundleWithPath:@"/System/Library/ControlCenter/Bundles/ReplayKitModule.bundle"', TWEAK)
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
 
-    def test_cancel_countdown_and_four_point_five_second_stop_blackout(self):
+    def test_cancel_countdown_and_five_second_stop_blackout(self):
         # Cancelled countdown retains its independent 6-second fallback.
         self.assertIn('(int64_t)(6.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('if (token != IBNCountdownToken || UIScreen.mainScreen.isCaptured) return;', TWEAK)
         self.assertIn('IBNCountdownExpanded = NO;', TWEAK)
         self.assertIn('++IBNCountdownToken;', TWEAK)
         # Normal stop: arcs disappear immediately and return after 5 seconds.
-        self.assertIn('(int64_t)(4.5 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('(int64_t)(5.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)  # unchanged charging pause
 
     def test_screen_recording_uses_two_phases(self):
@@ -213,7 +213,7 @@ class SourceTests(unittest.TestCase):
         self.assertIn('IBNRecordingExpanded = YES;', TWEAK)
         self.assertIn('IBNCountdownExpanded = NO;', TWEAK)
         self.assertIn('- (void)sessionIsStarting {', TWEAK)
-        self.assertIn('(int64_t)(4.5 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('(int64_t)(5.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('IBNRecordingStopIntermission = YES;', TWEAK)
         self.assertIn('IBNRecordingStopIntermission = NO;', TWEAK)
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
@@ -242,16 +242,16 @@ class SourceTests(unittest.TestCase):
         s=next(c for c in cells if c.get("key")=="pulseCharging")
         self.assertFalse(s["default"])
 
-    def test_recording_stop_hides_both_paths_for_four_point_five_seconds(self):
+    def test_recording_stop_hides_both_paths_for_five_seconds(self):
         # Do not reuse the charging intermission: capture and charging can
         # overlap, and both independently hide their arcs while active.
         self.assertIn('static BOOL IBNRecordingStopIntermission = NO;', TWEAK)
         self.assertIn('IBNRecordingStopIntermission = YES;', TWEAK)
         self.assertIn('IBNRecordingExpanded = NO;', TWEAK)
-        self.assertIn('dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.5 * NSEC_PER_SEC)),', TWEAK)
-        self.assertEqual(TWEAK.count('(int64_t)(4.5 * NSEC_PER_SEC)'), 1)  # recording stop only
+        self.assertIn('dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),', TWEAK)
+        self.assertEqual(TWEAK.count('(int64_t)(5.0 * NSEC_PER_SEC)'), 1)  # recording stop only
         self.assertEqual(TWEAK.count('(int64_t)(6.0 * NSEC_PER_SEC)'), 1)  # cancelled countdown only
-        self.assertIn('(int64_t)(4.5 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('(int64_t)(5.0 * NSEC_PER_SEC)', TWEAK)
         self.assertIn('if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;', TWEAK)
         self.assertIn('IBNRecordingStopIntermission = NO;', TWEAK)
         self.assertIn('layer.hidden = (percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive);', TWEAK)
@@ -323,17 +323,20 @@ class SourceTests(unittest.TestCase):
 
     def test_active_recording_right_end_only(self):
         self.assertIn('CGFloat rightCapClearance = (!left && IBNRecordingExpanded &&', TWEAK)
-        self.assertIn('!IBNLastDetectedLockScreen) ? 0.5 : 0.0;', TWEAK)
+        self.assertIn('!IBNLastDetectedLockScreen) ? 0.75 : 0.0;', TWEAK)
         self.assertIn('CGRectGetMaxX(r) + rightCapClearance;', TWEAK)
-        # Maintain positive right-hand clearance on top of 2pt baseline.
+        # Exactly 0.25pt extra outward only on right; baseline margin remains.
         self.assertIn('CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r) + rightCapClearance;', TWEAK)
         self.assertIn('CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;', TWEAK)
-        self.assertAlmostEqual(2.0 - 0.5, 1.5)
-        self.assertGreater(0.5, 0.0)
+        self.assertAlmostEqual(0.75 - 0.5, 0.25)
+        self.assertGreater(0.75, 0.0)
         self.assertIn('static const CGFloat IBNActiveRecordingOffsetX = -4.0;', TWEAK)
         self.assertIn('static const CGFloat IBNRecordingWidth = 180.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingWidth = 167.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNRecordingOffsetX = 0.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNLockOffsetX = -3.0;', TWEAK)
         self.assertIn('static const CGFloat IBNLockWidth = 164.0;', TWEAK)
-        self.assertIn('(int64_t)(4.5 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('(int64_t)(5.0 * NSEC_PER_SEC)', TWEAK)
 
     def test_callkit_hides_outlines_for_system_managed_calls(self):
         self.assertIn('#import <CallKit/CallKit.h>', TWEAK)
@@ -351,7 +354,7 @@ class SourceTests(unittest.TestCase):
         self.assertIn('IBNRecordingStopIntermission || IBNCallActive', TWEAK)
         self.assertIn('CallKit', (ROOT / 'Makefile').read_text())
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
-        self.assertEqual(TWEAK.count('(int64_t)(4.5 * NSEC_PER_SEC)'), 1)
+        self.assertEqual(TWEAK.count('(int64_t)(5.0 * NSEC_PER_SEC)'), 1)
         self.assertEqual(TWEAK.count('(int64_t)(6.0 * NSEC_PER_SEC)'), 1)
         self.assertEqual(TWEAK.count('(int64_t)(3.0 * NSEC_PER_SEC)'), 1)
 
