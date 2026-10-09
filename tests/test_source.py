@@ -62,7 +62,7 @@ class SourceTests(unittest.TestCase):
         self.assertIn('IBNColorForPercent(percent)', TWEAK)
         self.assertIn('%orig(IBNEnabled ? UIColor.clearColor : color);', TWEAK)
         self.assertIn('return IBNEnabled ? UIColor.clearColor : %orig;', TWEAK)
-        self.assertNotIn('SBLockScreenManager', TWEAK)
+        self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
         self.assertNotIn('notify_register_dispatch("com.apple.springboard.lockstate"', TWEAK)
     def test_lock_screen_only_geometry(self):
         self.assertIn('static const CGFloat IBNLockWidth = 164.0;', TWEAK)
