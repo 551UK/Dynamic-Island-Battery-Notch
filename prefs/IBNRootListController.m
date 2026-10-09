@@ -200,9 +200,7 @@ static void IBNHideLinkTextInView(UIView *view) {
     [self presentViewController:picker animated:YES completion:nil];
 }
 - (void)openColourPicker { [self openPickerForKey:@"fixedColor"]; }
-- (void)openColourPicker:(id)sender { [self openColourPicker]; }
 - (void)openChargingColourPicker { [self openPickerForKey:@"chargingColor"]; }
-- (void)openChargingColourPicker:(id)sender { [self openChargingColourPicker]; }
 - (void)colorPickerViewControllerDidSelectColor:(UIColorPickerViewController *)picker {
     CGFloat r=0,g=0,b=0,a=0;
     if (![picker.selectedColor getRed:&r green:&g blue:&b alpha:&a]) return;
@@ -216,5 +214,4 @@ static void IBNHideLinkTextInView(UIView *view) {
     NSURL *url = [NSURL URLWithString:@"https://github.com/551UK/Dynamic-Island-Battery-Notch"];
     [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
 }
-- (void)openGitHub:(id)sender { [self openGitHub]; }
 @end
