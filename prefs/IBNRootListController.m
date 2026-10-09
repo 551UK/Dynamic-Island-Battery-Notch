@@ -14,7 +14,7 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Island Battery Notch";
+    self.title = @"Dynamic Island Battery Notch";
 }
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];

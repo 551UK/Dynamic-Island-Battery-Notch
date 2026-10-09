@@ -7,5 +7,6 @@ IslandBatteryNotchPrefs_FRAMEWORKS = UIKit Foundation CoreFoundation
 IslandBatteryNotchPrefs_PRIVATE_FRAMEWORKS = Preferences
 IslandBatteryNotchPrefs_INSTALL_PATH = /Library/PreferenceBundles
 IslandBatteryNotchPrefs_INFOPLIST_FILE = Resources/Info.plist
+IslandBatteryNotchPrefs_RESOURCE_FILES = Resources/icon.png
 
 include $(THEOS_MAKE_PATH)/bundle.mk

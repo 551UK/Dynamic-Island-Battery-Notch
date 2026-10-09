@@ -289,6 +289,46 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(slider["max"], 8)
         self.assertEqual(slider["default"], 2.5)
 
+    def test_branding_settings_icon_and_sileo(self):
+        import base64
+        control = (ROOT / "control").read_text()
+        self.assertIn('Name: Dynamic Island Battery Notch', control)
+        self.assertIn('Description: Shows your battery level as a coloured line around the Dynamic Island', control)
+        self.assertNotIn('battery arcs', control.lower())
+        entry = plistlib.loads((ROOT / 'layout/Library/PreferenceLoader/Preferences/IslandBatteryNotch.plist').read_bytes())['entry']
+        self.assertEqual(entry['label'], 'Dynamic Island Battery Notch')
+        self.assertEqual(entry['icon'], '/var/jb/Library/PreferenceLoader/Preferences/IslandBatteryNotch.png')
+        self.assertEqual(entry['iconImage'], entry['icon'])
+        self.assertEqual(entry['iconImageSystem'], 'capsule.fill')
+        info = plistlib.loads((ROOT / 'prefs/Resources/Info.plist').read_bytes())
+        self.assertEqual(info['CFBundleDisplayName'], 'Dynamic Island Battery Notch')
+        self.assertEqual(info['CFBundleIconFile'], 'icon.png')
+        self.assertEqual(info['CFBundleIdentifier'], 'com.551.islandbatterynotchprefs')
+        self.assertIn('Package: com.551.islandbatterynotch', control)
+        self.assertIn('IslandBatteryNotchPrefs_RESOURCE_FILES = Resources/icon.png', (ROOT / 'prefs/Makefile').read_text())
+        self.assertIn('self.title = @"Dynamic Island Battery Notch";', (ROOT / 'prefs/IBNRootListController.m').read_text())
+        png = base64.b64decode((ROOT / 'assets/DynamicIslandBatteryNotch.png.b64').read_text())
+        self.assertTrue(png.startswith(bytes.fromhex('89504e470d0a1a0a')))
+        readme = (ROOT / 'README.md').read_text()
+        self.assertIn('<h1 align="center">Dynamic Island Battery Notch</h1>', readme)
+        self.assertIn('<p align="center">', readme)
+        self.assertIn('assets/made-by-551UK.svg', readme)
+        svg = (ROOT / 'assets/made-by-551UK.svg').read_text()
+        self.assertIn('made by 551UK', svg)
+        self.assertIn('fill="#8b949e"', svg)
+        workflow = (ROOT / '.github/workflows/build.yml').read_text()
+        self.assertIn('Generate Settings icon', workflow)
+        self.assertIn('test -s "$icon"', workflow)
+
+    def test_active_recording_right_end_only(self):
+        self.assertIn('CGFloat rightCapClearance = (!left && IBNRecordingExpanded &&', TWEAK)
+        self.assertIn('!IBNLastDetectedLockScreen) ? 3.0 : 0.0;', TWEAK)
+        self.assertIn('CGRectGetMaxX(r) + rightCapClearance;', TWEAK)
+        self.assertIn('static const CGFloat IBNActiveRecordingOffsetX = -4.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNRecordingWidth = 180.0;', TWEAK)
+        self.assertIn('static const CGFloat IBNLockWidth = 164.0;', TWEAK)
+        self.assertIn('(int64_t)(6.0 * NSEC_PER_SEC)', TWEAK)
+
     def test_settings(self):
         data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         keys = [x.get("key") for x in data if "key" in x]

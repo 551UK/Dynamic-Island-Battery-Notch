@@ -2,9 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>entry</key><dict>
 <key>cell</key><string>PSLinkCell</string>
-<key>label</key><string>Island Battery Notch</string>
+<key>label</key><string>Dynamic Island Battery Notch</string>
 <key>bundle</key><string>IslandBatteryNotchPrefs</string>
 <key>isController</key><true/>
 <key>detail</key><string>IBNRootListController</string>
 <key>controller</key><string>IBNRootListController</string>
+<key>icon</key><string>/var/jb/Library/PreferenceLoader/Preferences/IslandBatteryNotch.png</string>
+<key>iconImage</key><string>/var/jb/Library/PreferenceLoader/Preferences/IslandBatteryNotch.png</string>
+<key>iconImageSystem</key><string>capsule.fill</string>
 </dict></dict></plist>

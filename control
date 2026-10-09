@@ -1,8 +1,8 @@
 Package: com.551.islandbatterynotch
-Name: Island Battery Notch
-Version: 0.2.21
+Name: Dynamic Island Battery Notch
+Version: 0.2.22
 Architecture: iphoneos-arm64
-Description: Symmetric battery arcs around the Dynamic Island, continuously visible on Lock Screen, Home Screen and apps. iPhone 14 Pro Max, iOS 16 rootless.
+Description: Shows your battery level as a coloured line around the Dynamic Island. The line gets shorter as your battery runs down. Choose your colours, charging pulse and line thickness. The outline also adjusts for the Lock Screen and screen recording. For iPhone 14 Pro Max on iOS 16 (rootless).
 Maintainer: 551UK
 Author: 551UK
 Section: Tweaks
