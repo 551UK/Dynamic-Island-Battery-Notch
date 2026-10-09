@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.15 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.16 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -12,6 +12,7 @@
 #import <math.h>
 
 static void IBNRefresh(void);
+static void IBNInstallCountdownHookIfAvailable(void);
 
 @interface SpringBoard : UIApplication
 @end
@@ -24,6 +25,11 @@ static void IBNRefresh(void);
 // The already-tested Lock Screen lock view hook from Dynamic-Island-LS-Color-16.
 // No SBLockScreenManager, lock-state notification, or guessed private selector.
 @interface SBUIProudLockIconView : UIView
+@end
+// Loaded on demand from ReplayKitModule.bundle when Control Centre displays
+// the Screen Recording control. Hook only if the real class and method exist.
+@interface RPControlCenterMenuModuleViewController : UIViewController
+- (void)sessionIsStarting;
 @end
 
 @interface IBNOverlayWindow : UIWindow
@@ -92,6 +98,11 @@ static BOOL IBNRecordingStateKnown = NO;
 static BOOL IBNLastCaptured = NO;
 static BOOL IBNRecordingExpanded = NO;
 static NSUInteger IBNRecordingTransition = 0;
+// Separate countdown phase: ReplayKit's "sessionIsStarting" occurs when
+// Control Centre starts the 3-second countdown, before UIScreen.isCaptured.
+static BOOL IBNCountdownExpanded = NO;
+static NSUInteger IBNCountdownToken = 0;
+static BOOL IBNCountdownHookInstalled = NO;
 // Charging transition: immediately hide all battery arcs on plug-in, let
 // native iOS charging UI run for 3 seconds, then show the custom colour.
 // No polling, no additional SpringBoard hooks or private lock-state APIs.
@@ -113,7 +124,30 @@ static CGFloat IBNLastThickness = -1;
 static CGColorRef IBNLastColor = NULL;
 
 static BOOL IBNUseExpandedOutline(void) {
-    return IBNLastDetectedLockScreen || IBNRecordingExpanded;
+    return IBNLastDetectedLockScreen || IBNCountdownExpanded || IBNRecordingExpanded;
+}
+static void IBNBeginRecordingCountdown(void) {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ IBNBeginRecordingCountdown(); });
+        return;
+    }
+    // The same control can be invoked multiple times; don't unset an
+    // already-captured recording and never alter native ReplayKit operation.
+    if (UIScreen.mainScreen.isCaptured) return;
+    IBNCountdownExpanded = YES;
+    NSUInteger token = ++IBNCountdownToken;
+    IBNNeedsFullRedraw = YES;
+    IBNRefresh();
+    // A recording may be cancelled during the native 3-second countdown.
+    // If capture never starts, safely restore after a short grace period;
+    // a newer countdown or successful start invalidates this callback.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (token != IBNCountdownToken || UIScreen.mainScreen.isCaptured) return;
+        IBNCountdownExpanded = NO;
+        IBNNeedsFullRedraw = YES;
+        IBNRefresh();
+    });
 }
 static void IBNUpdateScreenCaptureState(void) {
     BOOL captured = UIScreen.mainScreen.isCaptured;
@@ -129,6 +163,9 @@ static void IBNUpdateScreenCaptureState(void) {
     if (captured) {
         // Expand immediately once iOS confirms capture has started.
         IBNRecordingExpanded = YES;
+        // Capture has started; recording state takes over from countdown.
+        IBNCountdownExpanded = NO;
+        ++IBNCountdownToken;
         IBNNeedsFullRedraw = YES;
         return;
     }
@@ -521,6 +558,7 @@ static void IBNRefresh(void) {
         dispatch_async(dispatch_get_main_queue(), ^{ IBNRefresh(); });
         return;
     }
+    IBNInstallCountdownHookIfAvailable();
     IBNUpdateChargingTransition();
     IBNLastDetectedLockScreen = IBNLockIconVisible();
     IBNUpdateScreenCaptureState();
@@ -670,6 +708,24 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
     IBNQueueLockRefresh();
 }
 %end
+// ReplayKitModule is a dynamically loaded Control Centre bundle. The
+// %group is installed only after confirming this selector actually exists,
+// so unsupported devices keep the safe UIKit capture-state behaviour.
+%group IBNCountdownHooks
+%hook RPControlCenterMenuModuleViewController
+- (void)sessionIsStarting {
+    %orig;
+    IBNBeginRecordingCountdown();
+}
+%end
+%end
+static void IBNInstallCountdownHookIfAvailable(void) {
+    if (IBNCountdownHookInstalled) return;
+    Class cls = objc_lookUpClass("RPControlCenterMenuModuleViewController");
+    if (!cls || !class_getInstanceMethod(cls, @selector(sessionIsStarting))) return;
+    IBNCountdownHookInstalled = YES;
+    %init(IBNCountdownHooks);
+}
 %ctor {
     @autoreleasepool {
         struct utsname info;
@@ -680,7 +736,14 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
         IBNLockViews = [NSHashTable weakObjectsHashTable];
         UIDevice.currentDevice.batteryMonitoringEnabled = YES;
         %init;
+        IBNInstallCountdownHookIfAvailable();
         NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
+        // ReplayKitModule is loaded lazily as Control Centre opens; hook it
+        // after its bundle loads, not at SpringBoard launch prematurely.
+        [nc addObserverForName:NSBundleDidLoadNotification object:nil
+                        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+            IBNInstallCountdownHookIfAvailable();
+        }];
         for (NSString *name in @[ UIDeviceBatteryLevelDidChangeNotification,
                                    UIDeviceBatteryStateDidChangeNotification,
                                    UIScreenCapturedDidChangeNotification,

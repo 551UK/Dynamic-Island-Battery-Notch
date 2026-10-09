@@ -1,5 +1,11 @@
 # Dynamic Island Battery Notch
 
+## Experimental v0.2.16 — expand when pressing Screen Recording, including the countdown
+
+The expanded outline begins **at the start of Control Centre's three-second recording countdown**, not after the recording has begun. It stays expanded throughout recording and for **one second after stopping**, then returns to the normal 126 × 37.33pt home/app size. If countdown is cancelled before recording starts, a six-second safety timeout restores the normal shape.
+
+The only new private ReplayKit callback is `-[RPControlCenterMenuModuleViewController sessionIsStarting]`, reported to fire at countdown start. The optional hook is installed only if the dynamically loaded ReplayKitModule class and method exist; no ReplayKit bundle is forced to load, and the stable UIKit `UIScreenCapturedDidChangeNotification` handling still works as fallback. Since this selector isn't publicly documented on iOS 16.3, **on-device testing is essential**. The saved stable `stable/v0.2.14-working-base` branch and v0.2.14 release are untouched. The same Lock Screen enlargement, padlock colour, battery colours, thickness, and three-second charging pause are retained.
+
 ## Experimental v0.2.15 — screen recording expanded outline
 
 Based on the confirmed working **v0.2.14** code. While UIKit reports screen capture, select the existing larger 164 × 34 pt Lock Screen outline, including the -3 pt horizontal offset and 2 pt outward clearance. When capture stops, hold this expanded outline for **1 second**, then restore the default 126 × 37.33 pt Home Screen/app outline. If recording resumes during that one-second hold, the pending return is cancelled. Actual Lock Screen presence always takes priority and keeps the outline expanded.

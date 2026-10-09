@@ -136,7 +136,7 @@ class SourceTests(unittest.TestCase):
     def test_capture_uses_stable_lock_screen_geometry(self):
         self.assertIn('UIScreenCapturedDidChangeNotification', TWEAK)
         self.assertIn('BOOL captured = UIScreen.mainScreen.isCaptured;', TWEAK)
-        self.assertIn('return IBNLastDetectedLockScreen || IBNRecordingExpanded;', TWEAK)
+        self.assertIn('return IBNLastDetectedLockScreen || IBNCountdownExpanded || IBNRecordingExpanded;', TWEAK)
         self.assertIn('IBNPortraitIslandRect(portraitWidth, IBNUseExpandedOutline())', TWEAK)
         self.assertIn('CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;', TWEAK)
         self.assertIn('IBNRecordingExpanded = YES;', TWEAK)
@@ -154,6 +154,34 @@ class SourceTests(unittest.TestCase):
         self.assertIn('IBNRecordingExpanded = NO;', TWEAK)
         # Charging popup keeps its independent 3-second delay.
         self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)
+
+    def test_countdown_starts_on_replaykit_button_state(self):
+        # Actual Control Centre ReplayKit "sessionIsStarting" happens at
+        # countdown launch, before the public captured-state turns true.
+        self.assertIn('%group IBNCountdownHooks', TWEAK)
+        self.assertIn('%hook RPControlCenterMenuModuleViewController', TWEAK)
+        self.assertIn('- (void)sessionIsStarting {', TWEAK)
+        self.assertIn('IBNBeginRecordingCountdown();', TWEAK)
+        self.assertIn('IBNCountdownExpanded = YES;', TWEAK)
+        self.assertIn('IBNLastDetectedLockScreen || IBNCountdownExpanded || IBNRecordingExpanded', TWEAK)
+        # Only install if class and method are present, never force-load
+        # ReplayKitModule and never call a guessed private lock manager.
+        self.assertIn('objc_lookUpClass("RPControlCenterMenuModuleViewController")', TWEAK)
+        self.assertIn('class_getInstanceMethod(cls, @selector(sessionIsStarting))', TWEAK)
+        self.assertIn('%init(IBNCountdownHooks);', TWEAK)
+        self.assertIn('NSBundleDidLoadNotification', TWEAK)
+        self.assertNotIn('bundleWithPath:@"/System/Library/ControlCenter/Bundles/ReplayKitModule.bundle"', TWEAK)
+        self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
+
+    def test_cancel_countdown_and_one_second_stop(self):
+        # Cancelled countdown cannot leave expanded border forever.
+        self.assertIn('(int64_t)(6.0 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('if (token != IBNCountdownToken || UIScreen.mainScreen.isCaptured) return;', TWEAK)
+        self.assertIn('IBNCountdownExpanded = NO;', TWEAK)
+        self.assertIn('++IBNCountdownToken;', TWEAK)
+        # Normal stop: same 1-second return as before.
+        self.assertIn('(int64_t)(1.0 * NSEC_PER_SEC)', TWEAK)
+        self.assertIn('(int64_t)(3.0 * NSEC_PER_SEC)', TWEAK)  # unchanged charging pause
 
     def test_thickness_floor_1_5(self):
         self.assertIn("IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8)", TWEAK)
