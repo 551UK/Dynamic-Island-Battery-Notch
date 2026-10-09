@@ -57,7 +57,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.25"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.26"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -108,10 +108,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.25 >/dev/null 2>&1; then
-            gh release upload v0.2.25 packages/*.deb --clobber
+          if gh release view v0.2.26 >/dev/null 2>&1; then
+            gh release upload v0.2.26 packages/*.deb --clobber
           else
-            gh release create v0.2.25 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.25" --notes "Fine-tune the active recording right-hand curve outward by just 0.25pt (extra clearance 0.5pt to 0.75pt); left, countdown, Lock Screen and outer stroke margin untouched. Increase recording-stop line hiding from 4.5 to 5 seconds. Charging animation delay remains 3 seconds and cancelled-recording countdown remains 6 seconds. Automatic phone/VoIP call hiding, charging pulse option and working Settings icon remain as before. v0.2.14 working-base branch stays untouched."
+            gh release create v0.2.26 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.26" --notes "Fine-tune the active recording right-hand curve outward by another 0.25pt (extra clearance 0.75pt to 1.00pt). Keep the entire left half, countdown, Lock Screen, 1.5pt minimum thickness and underlying 2pt outward stroke clearance unchanged. The 5-second hide after stopping a recording, 3-second charging popup pause, automatic call hiding, pulsing charging option and Settings icon remain unchanged. Saved v0.2.14 working-base branch is untouched."
           fi
 
       - name: Remove legacy DEB assets older than v0.2.14

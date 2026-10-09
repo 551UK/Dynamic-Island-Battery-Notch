@@ -1,4 +1,4 @@
-// Dynamic Island Battery Notch v0.2.25 - rootless SpringBoard overlay, iOS 16.3
+// Dynamic Island Battery Notch v0.2.26 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -281,11 +281,12 @@ static CGPathRef IBNHalfPath(CGRect r, BOOL left) {
     CGFloat radius = CGRectGetHeight(r) / 2.0;
     CGFloat centreX = CGRectGetMidX(r);
     CGFloat centreY = CGRectGetMidY(r);
-    // Tiny active-recording adjustment only: add 0.25pt right-tip margin
-    // compared with v0.2.24. Preserve the 2pt expanded-stroke clearance,
-    // the left side and the separately verified Lock Screen/countdown sizes.
+    // Tiny active-recording adjustment only: add another 0.25pt right-tip
+    // clearance vs v0.2.25 (0.75 -> 1.00pt total), keeping the curve
+    // outside the black Island. Preserve the 2pt expanded-stroke clearance,
+    // the left side and all other proven Lock Screen/countdown geometry.
     CGFloat rightCapClearance = (!left && IBNRecordingExpanded &&
-                                !IBNLastDetectedLockScreen) ? 0.75 : 0.0;
+                                !IBNLastDetectedLockScreen) ? 1.0 : 0.0;
     CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r) + rightCapClearance;
     CGFloat arcX = left ? edgeX + radius : edgeX - radius;
     CGFloat sign = left ? -1.0 : 1.0;

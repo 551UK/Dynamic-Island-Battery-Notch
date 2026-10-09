@@ -323,13 +323,13 @@ class SourceTests(unittest.TestCase):
 
     def test_active_recording_right_end_only(self):
         self.assertIn('CGFloat rightCapClearance = (!left && IBNRecordingExpanded &&', TWEAK)
-        self.assertIn('!IBNLastDetectedLockScreen) ? 0.75 : 0.0;', TWEAK)
+        self.assertIn('!IBNLastDetectedLockScreen) ? 1.0 : 0.0;', TWEAK)
         self.assertIn('CGRectGetMaxX(r) + rightCapClearance;', TWEAK)
-        # Exactly 0.25pt extra outward only on right; baseline margin remains.
+        # Another 0.25pt on the right only (0.75pt to 1.0pt); base stays 2pt.
         self.assertIn('CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r) + rightCapClearance;', TWEAK)
         self.assertIn('CGFloat lockClearance = IBNUseExpandedOutline() ? 2.0 : 0.0;', TWEAK)
-        self.assertAlmostEqual(0.75 - 0.5, 0.25)
-        self.assertGreater(0.75, 0.0)
+        self.assertAlmostEqual(1.0 - 0.75, 0.25)
+        self.assertGreater(1.0, 0.0)
         self.assertIn('static const CGFloat IBNActiveRecordingOffsetX = -4.0;', TWEAK)
         self.assertIn('static const CGFloat IBNRecordingWidth = 180.0;', TWEAK)
         self.assertIn('static const CGFloat IBNActiveRecordingWidth = 167.0;', TWEAK)
