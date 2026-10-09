@@ -104,7 +104,6 @@ static NSString *const IBNChanged = @"com.551.islandbatterynotch/preferences.cha
     [items addObject:chargingThicknessGroup];
     [self addSlider:items name:@"Charging Line Thickness" key:@"chargingThickness" value:2.5 min:1.5 max:12];
     PSSpecifier *thicknessGroup = [PSSpecifier groupSpecifierWithName:@"NORMAL LINE THICKNESS"];
-    [thicknessGroup setProperty:@"Minimum 1.5 pt (slider fully left), up to 8 pt. The Island position and shape remain fixed." forKey:@"footerText"];
     [items addObject:thicknessGroup];
     [self addSlider:items name:@"Line Thickness" key:@"thickness" value:2.5 min:1.5 max:8];
     PSSpecifier *about = [PSSpecifier groupSpecifierWithName:@"About"];
