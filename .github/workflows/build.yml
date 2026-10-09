@@ -57,7 +57,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.22"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.23"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -108,10 +108,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.22 >/dev/null 2>&1; then
-            gh release upload v0.2.22 packages/*.deb --clobber
+          if gh release view v0.2.23 >/dev/null 2>&1; then
+            gh release upload v0.2.23 packages/*.deb --clobber
           else
-            gh release create v0.2.22 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.22" --notes "Updated Settings and Sileo name to Dynamic Island Battery Notch, added a working rootless Settings icon, a centred README title with grey 551UK credit and an easier-to-understand description. During active screen recording only, extend the right curved end 3pt without moving the left. Kept the six-second recording-stop blackout, three-second charging pause, pulse option, countdown and known-good Lock Screen geometry."
+            gh release create v0.2.23 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.23" --notes "Updated Settings and Sileo name to Dynamic Island Battery Notch, added a working rootless Settings icon, a centred README title with grey 551UK credit and an easier-to-understand description. During active screen recording only, use 2pt extra clearance on the right curved end (previously 3pt), keeping it outside the black Island without moving the left. Set the recording-stop blackout to five seconds, three-second charging pause, pulse option, countdown and known-good Lock Screen geometry."
           fi
 
       - name: Remove legacy DEB assets older than v0.2.14
