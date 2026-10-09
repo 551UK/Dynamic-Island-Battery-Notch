@@ -1,5 +1,11 @@
 # Dynamic Island Battery Notch
 
+## Experimental v0.2.12 — clearer Lock Screen strokes, faster charging transition
+
+On the Lock Screen, the tweak now uses the **existing high-level secure SpringBoard overlay** for battery arcs, hiding duplicate native-window shape layers there. This avoids the lines being partly obscured by the native black Dynamic Island surface. Home Screen and apps still draw in the native system aperture window. Lock Screen and Home Screen sizes are unchanged; the lock colour, native white outline hiding, battery bands, and minimum 1.5pt thickness are unchanged.
+
+When a charger is newly connected, hide the battery arcs entirely for **2 seconds** (previously 4), so the native charging animation can play; then return in the selected custom Charging Colour. Unplugging immediately restores normal colour. No new private Lock Screen APIs or hooks. Physical device testing required.
+
 ## Experimental v0.2.11 — line thickness minimum
 
 The **Line Thickness** slider now starts at **1.5 pt** (fully left), can increase to **8 pt**, and defaults to **2.5 pt**. Existing saved values below 1.5 are clamped in both Settings and the drawing code. No change to Lock Screen alignment or colouring, and no additional hooks. Includes v0.2.10's native charge-popup wait and Lock Screen detection changes.

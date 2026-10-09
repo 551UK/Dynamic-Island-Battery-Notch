@@ -76,7 +76,8 @@ class SourceTests(unittest.TestCase):
     def test_charging_popup_unobstructed(self):
         self.assertIn("static void IBNUpdateChargingTransition(void)", TWEAK)
         self.assertIn("static BOOL IBNChargingIntermission = NO;", TWEAK)
-        self.assertIn("(int64_t)(4.0 * NSEC_PER_SEC)", TWEAK)
+        self.assertIn("(int64_t)(2.0 * NSEC_PER_SEC)", TWEAK)
+        self.assertNotIn("(int64_t)(4.0 * NSEC_PER_SEC)", TWEAK)
         self.assertIn("if (connected == IBNPowerConnected) return;", TWEAK)
         self.assertIn("NSUInteger token = ++IBNPowerTransitionToken;", TWEAK)
         self.assertIn("if (token != IBNPowerTransitionToken || !IBNPowerConnected) return;", TWEAK)
@@ -85,7 +86,7 @@ class SourceTests(unittest.TestCase):
         self.assertIn("IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;", TWEAK)
         self.assertIn("IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission;", TWEAK)
         self.assertIn("IBNApplyNativeBorderState();", TWEAK)
-        # Stock keyline can reappear during the four-second native popup.
+        # Stock keyline can reappear during the two-second native popup.
         self.assertIn("IBNEnabled && !IBNChargingIntermission", TWEAK)
         # No new private lock-manager hooks or dedicated polling loops.
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
@@ -98,6 +99,16 @@ class SourceTests(unittest.TestCase):
         self.assertIn("IBNPortraitIslandRect(portraitWidth, IBNLastDetectedLockScreen)", TWEAK)
         self.assertIn("static const CGFloat IBNLockWidth = 164.0;", TWEAK)
         self.assertIn("static const CGFloat IBNWidth = 126.0;", TWEAK)
+
+    def test_lockscreen_uses_topmost_overlay(self):
+        self.assertIn("if (IBNLastDetectedLockScreen) {", TWEAK)
+        self.assertIn("for (CAShapeLayer *layer in pair) layer.hidden = YES;", TWEAK)
+        self.assertIn("IBNHasActiveSystemAperture = IBNRenderSystemAperture();", TWEAK)
+        self.assertIn("IBNWindow.windowLevel = 10000.0;", TWEAK)
+        self.assertIn("- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event { return nil; }", TWEAK)
+        self.assertIn("static const CGFloat IBNLockWidth = 164.0;", TWEAK)
+        self.assertIn("static const CGFloat IBNLockHeight = 34.0;", TWEAK)
+        self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
 
     def test_thickness_floor_1_5(self):
         self.assertIn("IBNClamp(value ? [value doubleValue] : 2.5, 1.5, 8)", TWEAK)

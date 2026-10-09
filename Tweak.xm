@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.11 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.12 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -87,7 +87,7 @@ static char IBNOriginalLockStoredKey;
 static BOOL IBNLockRefreshQueued = NO;
 static BOOL IBNLastDetectedLockScreen = NO;
 // Charging transition: immediately hide all battery arcs on plug-in, let
-// native iOS charging UI run for 4 seconds, then show the custom colour.
+// native iOS charging UI run for 2 seconds, then show the custom colour.
 // No polling, no additional SpringBoard hooks or private lock-state APIs.
 static BOOL IBNPowerStateKnown = NO;
 static BOOL IBNPowerConnected = NO;
@@ -269,7 +269,7 @@ static void IBNUpdateChargingTransition(void) {
     IBNChargingIntermission = YES;
     IBNNeedsFullRedraw = YES;
     IBNApplyNativeBorderState();
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (token != IBNPowerTransitionToken || !IBNPowerConnected) return;
         IBNChargingIntermission = NO;
@@ -418,6 +418,15 @@ static BOOL IBNRenderSystemAperture(void) {
         UIWindow *window = aperture.window;
         if (!window || window == IBNWindow) continue;
         NSArray<CAShapeLayer *> *pair = objc_getAssociatedObject(window, &IBNApertureLayersKey);
+        // The native aperture window's drawing can be composited behind
+        // another black Island surface on the Lock Screen. Keep native
+        // shape layers hidden ONLY on the Lock Screen and draw using the
+        // existing high-level, touch-through SpringBoard overlay instead.
+        // Home Screen and foreground apps retain native window drawing.
+        if (IBNLastDetectedLockScreen) {
+            for (CAShapeLayer *layer in pair) layer.hidden = YES;
+            continue;
+        }
         BOOL visible = IBNVisibleAperture(aperture);
         CGRect rect = IBNNativeRect(window);
         if (CGRectIsNull(rect)) visible = NO;
@@ -483,7 +492,7 @@ static void IBNRefresh(void) {
     IBNUpdateChargingTransition();
     IBNLastDetectedLockScreen = IBNLockIconVisible();
     IBNEnsureWindow();
-    // The native aperture window is composited above foreground applications.
+    // Use native drawing in apps; the existing top-level overlay on the Lock Screen.
     IBNHasActiveSystemAperture = IBNRenderSystemAperture();
     if (!IBNWindow || !IBNLeft || !IBNRight) return;
     if (!IBNEnabled) {
