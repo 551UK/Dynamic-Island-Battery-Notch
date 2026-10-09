@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.0 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.1 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Two mirrored halves each lose 1% length on every reported 1% battery drop.
 #import <UIKit/UIKit.h>
@@ -7,6 +7,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 #import <sys/utsname.h>
 #import <string.h>
+#import <objc/runtime.h>
 #import <math.h>
 
 static void IBNRefresh(void);
@@ -56,6 +57,12 @@ static CGFloat IBNTop = 11.0;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
 
+// iOS draws the real Dynamic Island in an elevated system window. The original
+// auxiliary SpringBoard window can end up BEHIND foreground applications, so
+// paint in the existing system-aperture window when one is visible.
+static NSHashTable *IBNApertureViews = nil; // weak references
+static char IBNApertureLayersKey;
+static BOOL IBNHasActiveSystemAperture = NO;
 static IBNOverlayWindow *IBNWindow = nil;
 static IBNOverlayController *IBNController = nil;
 static CAShapeLayer *IBNLeft = nil;
@@ -177,12 +184,112 @@ static void IBNEnsureWindow(void) {
     IBNWindow.hidden = NO; // Do not steal the app's key window.
     IBNNeedsFullRedraw = YES;
 }
+static CGRect IBNNativeRect(UIWindow *window) {
+    CGRect bounds = window.bounds;
+    CGFloat w = bounds.size.width, h = bounds.size.height;
+    // Some system-aperture windows are full-screen, others just Island-sized.
+    if (w >= 300 && h >= 300) {
+        CGFloat portraitWidth = MIN(w, h), portraitHeight = MAX(w, h);
+        CGRect r = CGRectMake((portraitWidth - IBNWidth) / 2, IBNTop, IBNWidth, IBNHeight);
+        if (w > h) {
+            UIInterfaceOrientation orientation = window.windowScene.interfaceOrientation;
+            if (orientation == UIInterfaceOrientationLandscapeRight) {
+                return CGRectMake(portraitHeight - CGRectGetMaxY(r),
+                                  CGRectGetMinX(r), r.size.height, r.size.width);
+            }
+            return CGRectMake(CGRectGetMinY(r),
+                              portraitWidth - CGRectGetMaxX(r), r.size.height, r.size.width);
+        }
+        return r;
+    }
+    if (w >= 100 && h >= 25 && h < 130) {
+        return CGRectMake((w - IBNWidth)/2, (h - IBNHeight)/2,
+                          IBNWidth, IBNHeight);
+    }
+    return CGRectNull;
+}
+static BOOL IBNVisibleAperture(UIView *aperture) {
+    if (!aperture.window || aperture.window.hidden || aperture.window.alpha <= 0.01) return NO;
+    for (UIView *view = aperture; view && view != aperture.window; view = view.superview) {
+        if (view.hidden || view.alpha <= 0.01) return NO;
+    }
+    return YES;
+}
+static void IBNRegisterAperture(SBSystemApertureContainerView *aperture) {
+    if (!aperture) return;
+    if (!IBNApertureViews) IBNApertureViews = [NSHashTable weakObjectsHashTable];
+    [IBNApertureViews addObject:aperture];
+}
+static BOOL IBNRenderSystemAperture(void) {
+    BOOL anyVisible = NO;
+    NSMutableSet *seenWindows = [NSMutableSet set];
+    for (SBSystemApertureContainerView *aperture in [IBNApertureViews allObjects]) {
+        UIWindow *window = aperture.window;
+        if (!window || window == IBNWindow) continue;
+        NSArray<CAShapeLayer *> *pair = objc_getAssociatedObject(window, &IBNApertureLayersKey);
+        BOOL visible = IBNVisibleAperture(aperture);
+        CGRect rect = IBNNativeRect(window);
+        if (CGRectIsNull(rect)) visible = NO;
+        if (!visible || !IBNEnabled || UIDevice.currentDevice.batteryLevel < 0) {
+            for (CAShapeLayer *layer in pair) layer.hidden = YES;
+            continue;
+        }
+        if ([seenWindows containsObject:window]) continue;
+        [seenWindows addObject:window];
+        anyVisible = YES;
+        if (!pair) {
+            CAShapeLayer *left = [CAShapeLayer layer], *right = [CAShapeLayer layer];
+            for (CAShapeLayer *layer in @[left, right]) {
+                layer.fillColor = UIColor.clearColor.CGColor;
+                layer.lineCap = kCALineCapButt;
+                layer.lineJoin = kCALineJoinRound;
+                layer.contentsScale = UIScreen.mainScreen.scale;
+                layer.actions = @{@"path":NSNull.null,@"strokeStart":NSNull.null,
+                                  @"strokeEnd":NSNull.null,@"strokeColor":NSNull.null,
+                                  @"lineWidth":NSNull.null,@"hidden":NSNull.null};
+                [window.layer addSublayer:layer];
+            }
+            pair = @[left, right];
+            objc_setAssociatedObject(window, &IBNApertureLayersKey, pair, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        // Window-level layers aren't constrained by the capsule view's mask.
+        NSInteger percent = (NSInteger)lround(IBNClamp(UIDevice.currentDevice.batteryLevel, 0, 1)*100);
+        CGFloat trim = (1.0 - (CGFloat)percent / 100.0)/2.0;
+        UIColor *color = IBNColorForPercent(percent);
+        CGRect inner = CGRectInset(rect, IBNThickness / 2, IBNThickness / 2);
+        CGPathRef lp = IBNHalfPath(inner, YES);
+        CGPathRef rp = IBNHalfPath(inner, NO);
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        for (NSUInteger i = 0; i < 2; i++) {
+            CAShapeLayer *layer = pair[i];
+            layer.path = i == 0 ? lp : rp;
+            layer.strokeColor = color.CGColor;
+            layer.lineWidth = IBNThickness;
+            layer.strokeStart = trim;
+            layer.strokeEnd = 1.0 - trim;
+            layer.hidden = (percent == 0);
+            // A later inserted native subview must not cover our arcs.
+            if (layer.superlayer == window.layer && window.layer.sublayers.lastObject != layer) {
+                [layer removeFromSuperlayer];
+                [window.layer addSublayer:layer];
+            }
+        }
+        [CATransaction commit];
+        CGPathRelease(lp);
+        CGPathRelease(rp);
+    }
+    return anyVisible;
+}
+
 static void IBNRefresh(void) {
     if (![NSThread isMainThread]) {
         dispatch_async(dispatch_get_main_queue(), ^{ IBNRefresh(); });
         return;
     }
     IBNEnsureWindow();
+    // The native aperture window is composited above foreground applications.
+    IBNHasActiveSystemAperture = IBNRenderSystemAperture();
     if (!IBNWindow || !IBNLeft || !IBNRight) return;
     if (!IBNEnabled) {
         IBNLeft.hidden = YES;
@@ -209,7 +316,8 @@ static void IBNRefresh(void) {
         || !CGSizeEqualToSize(bounds.size, IBNLastBounds)
         || (IBNLastThickness != IBNThickness);
     BOOL colorChanged = IBNNeedsFullRedraw || !IBNLastColor || !CGColorEqualToColor(IBNLastColor, color.CGColor);
-    if (!geomChanged && !colorChanged && IBNLastPercent == percent && !IBNLeft.hidden) return;
+    if (!geomChanged && !colorChanged && IBNLastPercent == percent &&
+        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0)) return;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (geomChanged) {
@@ -243,8 +351,8 @@ static void IBNRefresh(void) {
     IBNRight.strokeStart = trim;
     IBNLeft.strokeEnd = 1.0 - trim;
     IBNRight.strokeEnd = 1.0 - trim;
-    IBNLeft.hidden = percent == 0;
-    IBNRight.hidden = percent == 0;
+    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0;
+    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0;
     [CATransaction commit];
     IBNLastRect = rect;
     IBNLastBounds = bounds.size;
@@ -270,10 +378,12 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
 %hook SBSystemApertureContainerView
 - (void)didMoveToWindow {
     %orig;
-    if (self.window) IBNRefresh();
+    IBNRegisterAperture(self);
+    IBNRefresh();
 }
 - (void)layoutSubviews {
     %orig;
+    IBNRegisterAperture(self);
     if (self.window) IBNRefresh();
 }
 %end
@@ -283,6 +393,7 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
         memset(&info, 0, sizeof(info));
         if (uname(&info) != 0 || strcmp(info.machine, "iPhone15,3") != 0) return;
         IBNLoadPreferences();
+        IBNApertureViews = [NSHashTable weakObjectsHashTable];
         UIDevice.currentDevice.batteryMonitoringEnabled = YES;
         %init;
         NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;

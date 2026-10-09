@@ -6,4 +6,5 @@
 <key>bundle</key><string>IslandBatteryNotchPrefs</string>
 <key>isController</key><true/>
 <key>detail</key><string>IBNRootListController</string>
+<key>controller</key><string>IBNRootListController</string>
 </dict></dict></plist>

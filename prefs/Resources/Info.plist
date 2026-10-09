@@ -4,6 +4,9 @@
 <key>CFBundleDisplayName</key><string>Island Battery Notch</string>
 <key>CFBundleIdentifier</key><string>com.551.islandbatterynotchprefs</string>
 <key>CFBundleName</key><string>IslandBatteryNotchPrefs</string>
+<key>CFBundleExecutable</key><string>IslandBatteryNotchPrefs</string>
+<key>NSPrincipalClass</key><string>IBNRootListController</string>
+<key>MinimumOSVersion</key><string>16.0</string>
 <key>CFBundlePackageType</key><string>BNDL</string>
-<key>CFBundleShortVersionString</key><string>0.2.0</string>
+<key>CFBundleShortVersionString</key><string>0.2.1</string>
 </dict></plist>

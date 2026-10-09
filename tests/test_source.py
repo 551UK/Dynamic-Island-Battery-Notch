@@ -27,5 +27,9 @@ class SourceTests(unittest.TestCase):
         keys = [x.get("key") for x in data if "key" in x]
         self.assertTrue(set(["enabled", "autoColor", "width", "height", "offsetY", "thickness"]).issubset(keys))
         self.assertIn("iphoneos-arm64", (ROOT / "control").read_text())
+        info = plistlib.loads((ROOT / "prefs/Resources/Info.plist").read_bytes())
+        self.assertEqual(info.get("NSPrincipalClass"), "IBNRootListController")
+        self.assertIn("IBNRenderSystemAperture", TWEAK)
+        self.assertIn("objc_setAssociatedObject(window, &IBNApertureLayersKey", TWEAK)
 if __name__ == "__main__":
     unittest.main()

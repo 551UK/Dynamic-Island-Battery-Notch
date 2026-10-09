@@ -38,7 +38,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.0"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.1"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -56,6 +56,8 @@ jobs:
           test -s "$prefs/IslandBatteryNotchPrefs"
           test -s "$prefs/Root.plist"
           test -s "$prefs/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :NSPrincipalClass" "$prefs/Info.plist" | grep -Fx IBNRootListController
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$prefs/Info.plist" | grep -Fx IslandBatteryNotchPrefs
           test -s "$prefs_entry"
           xcrun lipo "$dylib" -verify_arch arm64 arm64e
           xcrun lipo "$prefs/IslandBatteryNotchPrefs" -verify_arch arm64 arm64e
@@ -74,8 +76,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.0 >/dev/null 2>&1; then
-            gh release upload v0.2.0 packages/*.deb --clobber
+          if gh release view v0.2.1 >/dev/null 2>&1; then
+            gh release upload v0.2.1 packages/*.deb --clobber
           else
-            gh release create v0.2.0 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.0" --notes "First experimental iPhone 14 Pro Max iOS 16 rootless build. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
+            gh release create v0.2.1 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.1" --notes "First experimental iPhone 14 Pro Max iOS 16 rootless build. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
           fi
