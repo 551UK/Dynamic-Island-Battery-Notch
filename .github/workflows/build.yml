@@ -41,7 +41,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.20"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.21"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -79,10 +79,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.20 >/dev/null 2>&1; then
-            gh release upload v0.2.20 packages/*.deb --clobber
+          if gh release view v0.2.21 >/dev/null 2>&1; then
+            gh release upload v0.2.21 packages/*.deb --clobber
           else
-            gh release create v0.2.20 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.20" --notes "Shift only the ACTIVE red-dot recording outline 2pt left (-5pt offset); keep the 167pt width, position and all countdown and Lock Screen geometry. Hide both arcs for 4 seconds after stopping capture before returning to the resting size. Charging remains 3 seconds; pulse unchanged. Retain v0.2.14 stable rendering, 3s charging delay and 1.5pt minimum thickness and temporarily show original keyline for stock charge animation; then show selected Charging Colour, with instant unplug recovery. v0.2.4 base without unsafe lock-manager hooks. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
+            gh release create v0.2.21 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.21" --notes "Correct ACTIVE recording alignment based on zoomed screenshot: the left arc is already farther OUTSIDE the black fill while the right arc is closer/partly occluded; shift 1pt RIGHT (-4pt offset) without changing size. Hide both arcs for 6 seconds after recording stops. Countdown, Lock Screen, 3s charging delay and pulse unchanged. Retain v0.2.14 stable rendering, 3s charging delay and 1.5pt minimum thickness and temporarily show original keyline for stock charge animation; then show selected Charging Colour, with instant unplug recovery. v0.2.4 base without unsafe lock-manager hooks. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
           fi
 
       - name: Remove legacy DEB assets older than v0.2.14

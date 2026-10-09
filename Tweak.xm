@@ -1,4 +1,4 @@
-// Island Battery Notch v0.2.20 - rootless SpringBoard overlay, iOS 16.3
+// Island Battery Notch v0.2.21 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
@@ -90,7 +90,7 @@ static const CGFloat IBNRecordingOffsetX = 0.0;
 static const CGFloat IBNActiveRecordingWidth = 167.0;
 static const CGFloat IBNActiveRecordingHeight = 32.5;
 static const CGFloat IBNActiveRecordingTop = 14.0;
-static const CGFloat IBNActiveRecordingOffsetX = -5.0;
+static const CGFloat IBNActiveRecordingOffsetX = -4.0;
 static CGFloat IBNThickness = 2.5;
 static NSString *IBNFixedHex = @"#30D158";
 static NSString *IBNChargingHex = @"#00D7FF"; // Custom charging colour (default cyan)
@@ -113,7 +113,7 @@ static BOOL IBNRecordingStateKnown = NO;
 static BOOL IBNLastCaptured = NO;
 static BOOL IBNRecordingExpanded = NO;
 static NSUInteger IBNRecordingTransition = 0;
-// Hide BOTH rendering paths for four full seconds after capture stops, so
+// Hide BOTH rendering paths for six full seconds after capture stops, so
 // iOS's recording-saved Dynamic Island banner appears unobstructed.
 static BOOL IBNRecordingStopIntermission = NO;
 // Separate countdown phase: ReplayKit's "sessionIsStarting" occurs when
@@ -188,13 +188,13 @@ static void IBNUpdateScreenCaptureState(void) {
         IBNNeedsFullRedraw = YES;
         return;
     }
-    // On stop, hide the arcs instantly for four seconds while iOS displays
+    // On stop, hide the arcs instantly for six seconds while iOS displays
     // its own recording-saved banner. Geometry can safely return to the
     // resting profile while hidden, so it reappears already aligned.
     IBNRecordingStopIntermission = YES;
     IBNRecordingExpanded = NO;
     IBNNeedsFullRedraw = YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6.0 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;
         IBNRecordingStopIntermission = NO;
@@ -382,7 +382,7 @@ static BOOL IBNRecordingOutlineProfile(void) {
 }
 static BOOL IBNActiveRecordingOutlineProfile(void) {
     // The red-dot profile is active only while capture is ongoing.
-    // After stopping, arcs are hidden for 4 seconds and return at rest size.
+    // After stopping, arcs are hidden for 6 seconds and return at rest size.
     return !IBNLastDetectedLockScreen && IBNRecordingExpanded;
 }
 static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL expanded) {
