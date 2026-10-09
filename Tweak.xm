@@ -1,9 +1,10 @@
-// Dynamic Island Battery Notch v0.2.23 - rootless SpringBoard overlay, iOS 16.3
+// Dynamic Island Battery Notch v0.2.24 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
+#import <CallKit/CallKit.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <sys/utsname.h>
 #import <string.h>
@@ -113,7 +114,7 @@ static BOOL IBNRecordingStateKnown = NO;
 static BOOL IBNLastCaptured = NO;
 static BOOL IBNRecordingExpanded = NO;
 static NSUInteger IBNRecordingTransition = 0;
-// Hide BOTH rendering paths for five full seconds after capture stops, so
+// Hide BOTH rendering paths for 4.5 seconds after capture stops, so
 // iOS's recording-saved Dynamic Island banner appears unobstructed.
 static BOOL IBNRecordingStopIntermission = NO;
 // Separate countdown phase: ReplayKit's "sessionIsStarting" occurs when
@@ -140,6 +141,35 @@ static CGRect IBNLastRect = {{0,0},{0,0}};
 static CGSize IBNLastBounds = {0,0};
 static CGFloat IBNLastThickness = -1;
 static CGColorRef IBNLastColor = NULL;
+// Public CallKit observation: no private phone/Lock Screen hooks needed.
+static BOOL IBNCallActive = NO;
+@interface IBNCallStateDelegate : NSObject <CXCallObserverDelegate>
+@end
+static CXCallObserver *IBNCallObserver = nil;
+static IBNCallStateDelegate *IBNCallDelegate = nil;
+static void IBNUpdateCallVisibility(CXCallObserver *observer, CXCall *changedCall) {
+    // Hide from the first incoming/outgoing ringing/dialling event onward.
+    BOOL active = changedCall && !changedCall.hasEnded;
+    for (CXCall *call in observer.calls) {
+        if (!call.hasEnded) { active = YES; break; }
+    }
+    if (IBNCallActive == active) return;
+    IBNCallActive = active;
+    IBNNeedsFullRedraw = YES;
+    IBNRefresh();
+}
+@implementation IBNCallStateDelegate
+- (void)callObserver:(CXCallObserver *)observer callChanged:(CXCall *)call {
+    IBNUpdateCallVisibility(observer, call);
+}
+@end
+static void IBNStartCallMonitoring(void) {
+    if (IBNCallObserver) return;
+    IBNCallDelegate = [IBNCallStateDelegate new];
+    IBNCallObserver = [CXCallObserver new];
+    [IBNCallObserver setDelegate:IBNCallDelegate queue:dispatch_get_main_queue()];
+    IBNUpdateCallVisibility(IBNCallObserver, nil);
+}
 
 static BOOL IBNUseExpandedOutline(void) {
     return IBNLastDetectedLockScreen || IBNCountdownExpanded || IBNRecordingExpanded;
@@ -188,13 +218,13 @@ static void IBNUpdateScreenCaptureState(void) {
         IBNNeedsFullRedraw = YES;
         return;
     }
-    // On stop, hide the arcs instantly for five seconds while iOS displays
+    // On stop, hide the arcs instantly for 4.5 seconds while iOS displays
     // its own recording-saved banner. Geometry can safely return to the
     // resting profile while hidden, so it reappears already aligned.
     IBNRecordingStopIntermission = YES;
     IBNRecordingExpanded = NO;
     IBNNeedsFullRedraw = YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;
         IBNRecordingStopIntermission = NO;
@@ -251,13 +281,11 @@ static CGPathRef IBNHalfPath(CGRect r, BOOL left) {
     CGFloat radius = CGRectGetHeight(r) / 2.0;
     CGFloat centreX = CGRectGetMidX(r);
     CGFloat centreY = CGRectGetMidY(r);
-    // The v0.2.22 right-hand recording cap cleared the black Island, but
-    // extended slightly farther outward than needed. Reduce its extra
-    // clearance by 1 pt (from 3 to 2), preserving a visible margin outside
-    // the black cutout. Never alter the left side, baseline geometry,
-    // Lock Screen or recording countdown paths.
+    // Trim only active recording's right-hand extension (2pt -> 0.5pt).
+    // It remains POSITIVE, on top of the already-working 2pt outward
+    // expanded-line clearance. Other Island states remain unchanged.
     CGFloat rightCapClearance = (!left && IBNRecordingExpanded &&
-                                !IBNLastDetectedLockScreen) ? 2.0 : 0.0;
+                                !IBNLastDetectedLockScreen) ? 0.5 : 0.0;
     CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r) + rightCapClearance;
     CGFloat arcX = left ? edgeX + radius : edgeX - radius;
     CGFloat sign = left ? -1.0 : 1.0;
@@ -389,7 +417,7 @@ static BOOL IBNRecordingOutlineProfile(void) {
 }
 static BOOL IBNActiveRecordingOutlineProfile(void) {
     // The red-dot profile is active only while capture is ongoing.
-    // After stopping, arcs are hidden for 5 seconds and return at rest size.
+    // After stopping, arcs are hidden for 4.5 seconds and return at rest size.
     return !IBNLastDetectedLockScreen && IBNRecordingExpanded;
 }
 static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL expanded) {
@@ -614,7 +642,7 @@ static BOOL IBNRenderSystemAperture(void) {
             // the bottom-centre end as the battery level decreases.
             layer.strokeStart = 0.0;
             layer.strokeEnd = progress;
-            layer.hidden = (percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission);
+            layer.hidden = (percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive);
             IBNUpdateChargingPulse(layer);
             // A later inserted native subview must not cover our arcs.
             if (layer.superlayer == window.layer && window.layer.sublayers.lastObject != layer) {
@@ -673,7 +701,7 @@ static void IBNRefresh(void) {
         || (IBNLastThickness != IBNThickness);
     BOOL colorChanged = IBNNeedsFullRedraw || !IBNLastColor || !CGColorEqualToColor(IBNLastColor, color.CGColor);
     if (!geomChanged && !colorChanged && IBNLastPercent == percent &&
-        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission)) return;
+        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive)) return;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (geomChanged) {
@@ -708,8 +736,8 @@ static void IBNRefresh(void) {
     IBNRight.strokeStart = 0.0;
     IBNLeft.strokeEnd = progress;
     IBNRight.strokeEnd = progress;
-    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission;
-    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission;
+    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive;
+    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive;
     IBNUpdateChargingPulse(IBNLeft);
     IBNUpdateChargingPulse(IBNRight);
     [CATransaction commit];
@@ -737,7 +765,7 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
 %hook SpringBoard
 - (void)applicationDidFinishLaunching:(id)application {
     %orig(application);
-    dispatch_async(dispatch_get_main_queue(), ^{ IBNRefresh(); });
+    dispatch_async(dispatch_get_main_queue(), ^{ IBNStartCallMonitoring(); IBNRefresh(); });
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{ IBNRefresh(); });
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)),

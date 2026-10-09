@@ -8,7 +8,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = IslandBatteryNotch
 IslandBatteryNotch_FILES = Tweak.xm
 IslandBatteryNotch_CFLAGS = -fobjc-arc -Wall -Wextra -Wno-unused-parameter
-IslandBatteryNotch_FRAMEWORKS = UIKit Foundation QuartzCore CoreFoundation
+IslandBatteryNotch_FRAMEWORKS = UIKit Foundation QuartzCore CoreFoundation CallKit
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 SUBPROJECTS += prefs
