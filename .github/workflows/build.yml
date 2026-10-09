@@ -1,0 +1,81 @@
+name: Build and release rootless DEB
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: island-battery-notch-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Theos and iOS SDKs
+        uses: Randomblock1/theos-action@v1
+        with:
+          theos-sdks: https://github.com/theos/sdks
+          theos-sdks-branch: master
+
+      - name: Compile rootless tweak
+        run: make clean package FINALPACKAGE=1
+
+      - name: Verify built package
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install dpkg
+          shopt -s nullglob
+          debs=(packages/*.deb)
+          test "${#debs[@]}" -eq 1
+          deb="${debs[0]}"
+          test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
+          test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.2.0"
+          root="$RUNNER_TEMP/island-notch-verify"
+          ctrl="$RUNNER_TEMP/island-notch-control"
+          mkdir -p "$root" "$ctrl"
+          dpkg-deb -x "$deb" "$root"
+          dpkg-deb -e "$deb" "$ctrl"
+          test ! -e "$ctrl/postinst"
+          test ! -e "$ctrl/prerm"
+          test ! -e "$ctrl/postrm"
+          dylib="$root/var/jb/Library/MobileSubstrate/DynamicLibraries/IslandBatteryNotch.dylib"
+          tweak_filter="$root/var/jb/Library/MobileSubstrate/DynamicLibraries/IslandBatteryNotch.plist"
+          prefs="$root/var/jb/Library/PreferenceBundles/IslandBatteryNotchPrefs.bundle"
+          prefs_entry="$root/var/jb/Library/PreferenceLoader/Preferences/IslandBatteryNotch.plist"
+          test -s "$dylib"
+          test -s "$tweak_filter"
+          test -s "$prefs/IslandBatteryNotchPrefs"
+          test -s "$prefs/Root.plist"
+          test -s "$prefs/Info.plist"
+          test -s "$prefs_entry"
+          xcrun lipo "$dylib" -verify_arch arm64 arm64e
+          xcrun lipo "$prefs/IslandBatteryNotchPrefs" -verify_arch arm64 arm64e
+          plutil -lint "$prefs/Root.plist" "$prefs/Info.plist" "$prefs_entry" "$tweak_filter"
+          echo "Rootless package and binary verification passed."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IslandBatteryNotch-rootless-DEB
+          path: packages/*.deb
+          if-no-files-found: error
+
+      - name: Publish DEB to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.2.0 >/dev/null 2>&1; then
+            gh release upload v0.2.0 packages/*.deb --clobber
+          else
+            gh release create v0.2.0 packages/*.deb --target "$GITHUB_SHA" --title "Island Battery Notch v0.2.0" --notes "First experimental iPhone 14 Pro Max iOS 16 rootless build. Always-on Lock/Home/app overlay; symmetric 1% battery progression; red 0–20%, yellow 21–60%, green 61–100%. Install with Sileo then respring."
+          fi
