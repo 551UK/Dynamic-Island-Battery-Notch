@@ -133,7 +133,7 @@ jobs:
           done < "$RUNNER_TEMP/old-releases.txt"
 
           gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100" \
-            --jq '.[] | select(.name != "main") | .name' \
+            --jq '.[] | select(.name != "main" and .name != "stable/v0.2.30-known-good") | .name' \
             > "$RUNNER_TEMP/old-branches.txt"
           while IFS= read -r branch; do
             test -n "$branch" || continue
