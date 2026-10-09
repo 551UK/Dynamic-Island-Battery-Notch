@@ -53,28 +53,15 @@ class SourceTests(unittest.TestCase):
             self.assertAlmostEqual(path_bottom - thickness / 2, original_bottom)
             self.assertAlmostEqual(path_bottom + thickness / 2, original_bottom + thickness)
 
-    def test_lock_screen_profile(self):
-        # The default resting Island MUST be unchanged.
-        for declaration in (
-            "static const CGFloat IBNWidth = 126.0;",
-            "static const CGFloat IBNHeight = 37.33;",
-            "static const CGFloat IBNTop = 11.0;",
-        ):
-            self.assertIn(declaration, TWEAK)
-        # Profile measured against the user's lock screen screenshot.
-        for declaration in (
-            "static const CGFloat IBNLockWidth = 164.0;",
-            "static const CGFloat IBNLockHeight = 34.0;",
-            "static const CGFloat IBNLockTop = 12.5;",
-            "static const CGFloat IBNLockOffsetX = -3.0;",
-        ):
-            self.assertIn(declaration, TWEAK)
-        self.assertIn("isLockScreenVisible", TWEAK)
-        self.assertIn('notify_register_dispatch("com.apple.springboard.lockstate"', TWEAK)
-        self.assertEqual(TWEAK.count("IBNRectForPortraitWidth(portraitWidth)"), 2)
-        self.assertIn("IBNOutwardStrokeRect(rect)", TWEAK)
-        self.assertNotIn('IBNRead(@"lockWidth")', TWEAK)
-        self.assertNotIn('IBNRead(@"lockOffsetX")', TWEAK)
+    def test_safe_mode_rollback(self):
+        # v0.2.5's new SpringBoard-private lock-screen query caused Safe Mode.
+        # Keep lock screen geometry unchanged until crash log investigation.
+        self.assertNotIn("SBLockScreenManager", TWEAK)
+        self.assertNotIn("IBNLockScreenVisible", TWEAK)
+        self.assertNotIn("IBNLockWidth", TWEAK)
+        self.assertNotIn('notify_register_dispatch("com.apple.springboard.lockstate"', TWEAK)
+        self.assertIn("static const CGFloat IBNWidth = 126.0;", TWEAK)
+
     def test_settings(self):
         data = plistlib.loads((ROOT / "prefs/Resources/Root.plist").read_bytes())
         keys = [x.get("key") for x in data if "key" in x]
