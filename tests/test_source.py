@@ -60,8 +60,8 @@ class SourceTests(unittest.TestCase):
         self.assertIn('%hook SBSystemApertureContainerView', TWEAK)
         self.assertIn('IBNApplyProudLockColor', TWEAK)
         self.assertIn('IBNColorForPercent(percent)', TWEAK)
-        self.assertIn('%orig(IBNEnabled ? UIColor.clearColor : color);', TWEAK)
-        self.assertIn('return IBNEnabled ? UIColor.clearColor : %orig;', TWEAK)
+        self.assertIn('%orig((IBNEnabled && !IBNChargingIntermission) ? UIColor.clearColor : color);', TWEAK)
+        self.assertIn('return (IBNEnabled && !IBNChargingIntermission) ? UIColor.clearColor : %orig;', TWEAK)
         self.assertNotIn('objc_getClass("SBLockScreenManager")', TWEAK)
         self.assertNotIn('notify_register_dispatch("com.apple.springboard.lockstate"', TWEAK)
     def test_lock_screen_only_geometry(self):
