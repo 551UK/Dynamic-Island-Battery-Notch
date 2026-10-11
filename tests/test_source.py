@@ -332,8 +332,9 @@ class SourceTests(unittest.TestCase):
         readme = (ROOT / 'README.md').read_text()
         self.assertIn('# Dynamic Island Battery Notch', readme)
         self.assertIn('Lock Screen padlock matches the battery percentage colour theme', readme)
-        self.assertIn('releases/latest', readme)
-        self.assertLessEqual(len(readme.splitlines()), 12)
+        # A short feature-only README is valid even without a DEB hyperlink.
+        self.assertIn('Dynamic Island Battery Notch displays your remaining charge', readme)
+        self.assertLessEqual(sum(bool(line.strip()) for line in readme.splitlines()), 8)
         self.assertFalse((ROOT / 'assets/made-by-551UK.svg').exists())
         self.assertFalse((ROOT / 'prefs/Resources/Root.plist').exists())
         workflow = (ROOT / '.github/workflows/build.yml').read_text()
