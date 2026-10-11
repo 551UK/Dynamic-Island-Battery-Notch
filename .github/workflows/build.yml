@@ -57,7 +57,7 @@ jobs:
           deb="${debs[0]}"
           test "$(dpkg-deb -f "$deb" Package)" = "com.551.islandbatterynotch"
           test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64"
-          test "$(dpkg-deb -f "$deb" Version)" = "0.2.30"
+          test "$(dpkg-deb -f "$deb" Version)" = "0.3.0"
           root="$RUNNER_TEMP/island-notch-verify"
           ctrl="$RUNNER_TEMP/island-notch-control"
           mkdir -p "$root" "$ctrl"
@@ -107,37 +107,47 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view v0.2.30 >/dev/null 2>&1; then
-            gh release upload v0.2.30 packages/*.deb --clobber
-            gh release edit v0.2.30 --notes-file /dev/null
+          if gh release view v0.3.0 >/dev/null 2>&1; then
+            gh release upload v0.3.0 packages/*.deb --clobber
+            gh release edit v0.3.0 --notes-file /dev/null
           else
-            gh release create v0.2.30 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.2.30" --notes-file /dev/null
+            gh release create v0.3.0 packages/*.deb --target "$GITHUB_SHA" --title "Dynamic Island Battery Notch v0.3.0" --notes-file /dev/null
           fi
 
-      - name: Keep only the latest release and main branch
-        # Remove old RELEASE ENTRIES too, not just their .deb attachments:
-        # otherwise they still appear in GitHub's Releases sidebar.
-        # Preserve historical Git tags/commits and the current v0.2.30 DEB.
+      - name: Remove obsolete releases, tags and branches
+        # Runs ONLY after tests, package verification and v0.3.0 publishing.
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+          shopt -s nullglob
+          debs=(packages/*.deb)
+          test "${#debs[@]}" -eq 1
+          name="$(basename "${debs[0]}")"
+          gh release view v0.3.0 --json assets --jq '.assets[].name' | grep -Fx "$name"
+
           gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | select(.tag_name != "v0.2.30") | .id' \
-            > "$RUNNER_TEMP/old-releases.txt"
-          while IFS= read -r release_id; do
-            test -n "$release_id" || continue
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
-            echo "Removed old release ${release_id}"
-          done < "$RUNNER_TEMP/old-releases.txt"
+            --jq '.[] | select(.tag_name != "v0.3.0") | .tag_name' \
+            > "$RUNNER_TEMP/old-release-tags.txt"
+          while IFS= read -r old_tag; do
+            test -n "$old_tag" || continue
+            gh release delete "$old_tag" --yes --cleanup-tag
+          done < "$RUNNER_TEMP/old-release-tags.txt"
+
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
+            --jq '.[] | select(.name != "v0.3.0") | .name' \
+            > "$RUNNER_TEMP/other-tags.txt"
+          while IFS= read -r old_tag; do
+            test -n "$old_tag" || continue
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${old_tag}"
+          done < "$RUNNER_TEMP/other-tags.txt"
 
           gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100" \
-            --jq '.[] | select(.name != "main" and .name != "stable/v0.2.30-known-good" and .name != "diagnostics/dynamic-island-sizing" and .name != "diagnostics/island-combined-autofit" and .name != "stable/diag5-working-autofit" and .name != "experimental/automatic-all-states") | .name' \
-            > "$RUNNER_TEMP/old-branches.txt"
-          while IFS= read -r branch; do
-            test -n "$branch" || continue
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}"
-          done < "$RUNNER_TEMP/old-branches.txt"
-
-          echo "Kept only v0.2.30 in Releases and main as the only branch."
+            --jq '.[] | select(.name != "main") | .name' \
+            > "$RUNNER_TEMP/other-branches.txt"
+          while IFS= read -r old_branch; do
+            test -n "$old_branch" || continue
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${old_branch}"
+          done < "$RUNNER_TEMP/other-branches.txt"
+          echo "Retained main and the v0.3.0 release only."

@@ -6,9 +6,9 @@ INSTALL_TARGET_PROCESSES = SpringBoard
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = IslandBatteryNotch
-IslandBatteryNotch_FILES = Tweak.xm
+IslandBatteryNotch_FILES = Tweak.xm IBNGeometry.m
 IslandBatteryNotch_CFLAGS = -fobjc-arc -Wall -Wextra -Wno-unused-parameter
-IslandBatteryNotch_FRAMEWORKS = UIKit Foundation QuartzCore CoreFoundation CallKit
+IslandBatteryNotch_FRAMEWORKS = UIKit Foundation QuartzCore CoreFoundation
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 SUBPROJECTS += prefs

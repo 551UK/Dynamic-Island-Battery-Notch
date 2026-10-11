@@ -1,10 +1,10 @@
-// Dynamic Island Battery Notch v0.2.30 - rootless SpringBoard overlay, iOS 16.3
+// Dynamic Island Battery Notch v0.3.0 - rootless SpringBoard overlay, iOS 16.3
 // Target: iPhone 14 Pro Max (iPhone15,3).
 // Both halves stay joined at the top; the gap opens from the bottom upward by 1% per battery drop.
+#import "IBNGeometry.h"
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
-#import <CallKit/CallKit.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <sys/utsname.h>
 #import <string.h>
@@ -13,7 +13,6 @@
 #import <math.h>
 
 static void IBNRefresh(void);
-static void IBNInstallCountdownHookIfAvailable(void);
 
 @interface SpringBoard : UIApplication
 @end
@@ -27,12 +26,7 @@ static void IBNInstallCountdownHookIfAvailable(void);
 // No SBLockScreenManager, lock-state notification, or guessed private selector.
 @interface SBUIProudLockIconView : UIView
 @end
-// Loaded on demand from ReplayKitModule.bundle when Control Centre displays
-// the Screen Recording control. Hook only if the real class and method exist.
-@interface RPControlCenterMenuModuleViewController : UIViewController
-- (void)sessionIsStarting;
-@end
-
+// The Island's native capsule now handles recording and call transitions.
 @interface IBNOverlayWindow : UIWindow
 @end
 @implementation IBNOverlayWindow
@@ -78,23 +72,7 @@ static const CGFloat IBNLockWidth = 164.0;
 static const CGFloat IBNLockHeight = 34.0;
 static const CGFloat IBNLockTop = 12.5;
 static const CGFloat IBNLockOffsetX = -3.0;
-// Recording expands more than Lock Screen; leave the proven Lock Screen untouched.
-// Countdown: the black Island is approximately 180pt wide and centred.
-static const CGFloat IBNRecordingWidth = 180.0;
-static const CGFloat IBNRecordingOffsetX = 0.0;
-// Once the countdown becomes an active recording, the red-dot Island
-// contracts. The proven narrow geometry follows its visible perimeter.
-// This does not alter the Lock Screen's independently stable profile.
-// Fine alignment for the red-dot capsule (distinct from countdown):
-// the previous arc was slightly inside the curved left/right sides and
-// too high on the top. Widen 3pt, lower the top 1.5pt, keep bottom fixed.
-static const CGFloat IBNActiveRecordingWidth = 167.0;
-static const CGFloat IBNActiveRecordingHeight = 32.5;
-static const CGFloat IBNActiveRecordingTop = 14.0;
-static const CGFloat IBNActiveRecordingOffsetX = -4.0;
-// Lift ONLY the red-dot recording profile's upper edge. The lower edge,
-// left/right side positions and proven right-cap clearance stay unchanged.
-static const CGFloat IBNActiveRecordingTopLift = 0.75;
+// No fixed recording/countdown dimensions: the native Island supplies them.
 static CGFloat IBNThickness = 2.5;
 static CGFloat IBNChargingThickness = 2.5; // Independent power-connected thickness.
 static NSString *IBNFixedHex = @"#30D158";
@@ -112,27 +90,7 @@ static char IBNOriginalLockStoredKey;
 // Coalesce redraw requests from the existing lock-icon layout lifecycle.
 static BOOL IBNLockRefreshQueued = NO;
 static BOOL IBNLastDetectedLockScreen = NO;
-// UIKit's public capture state also indicates screen mirroring. It is used
-// only to select the already-proven large Lock Screen battery outline.
-static BOOL IBNRecordingStateKnown = NO;
-static BOOL IBNLastCaptured = NO;
-static BOOL IBNRecordingExpanded = NO;
-static NSUInteger IBNRecordingTransition = 0;
-// Hide BOTH rendering paths for 5 seconds after capture stops, so
-// iOS's recording-saved Dynamic Island banner appears unobstructed.
-static BOOL IBNRecordingStopIntermission = NO;
-// Separate countdown phase: ReplayKit's "sessionIsStarting" occurs when
-// Control Centre starts the 3-second countdown, before UIScreen.isCaptured.
-static BOOL IBNCountdownExpanded = NO;
-static NSUInteger IBNCountdownToken = 0;
-static BOOL IBNCountdownHookInstalled = NO;
-// Charging transition: immediately hide all battery arcs on plug-in, let
-// native iOS charging UI run for 3 seconds, then show the custom colour.
-// No polling, no additional SpringBoard hooks or private lock-state APIs.
-static BOOL IBNPowerStateKnown = NO;
 static BOOL IBNPowerConnected = NO;
-static BOOL IBNChargingIntermission = NO;
-static NSUInteger IBNPowerTransitionToken = 0;
 static char IBNApertureLayersKey;
 static BOOL IBNHasActiveSystemAperture = NO;
 static IBNOverlayWindow *IBNWindow = nil;
@@ -145,98 +103,11 @@ static CGRect IBNLastRect = {{0,0},{0,0}};
 static CGSize IBNLastBounds = {0,0};
 static CGFloat IBNLastThickness = -1;
 static CGColorRef IBNLastColor = NULL;
-// Public CallKit observation: no private phone/Lock Screen hooks needed.
-static BOOL IBNCallActive = NO;
-@interface IBNCallStateDelegate : NSObject <CXCallObserverDelegate>
-@end
-static CXCallObserver *IBNCallObserver = nil;
-static IBNCallStateDelegate *IBNCallDelegate = nil;
-static void IBNUpdateCallVisibility(CXCallObserver *observer, CXCall *changedCall) {
-    // Hide from the first incoming/outgoing ringing/dialling event onward.
-    BOOL active = changedCall && !changedCall.hasEnded;
-    for (CXCall *call in observer.calls) {
-        if (!call.hasEnded) { active = YES; break; }
-    }
-    if (IBNCallActive == active) return;
-    IBNCallActive = active;
-    IBNNeedsFullRedraw = YES;
-    IBNRefresh();
-}
-@implementation IBNCallStateDelegate
-- (void)callObserver:(CXCallObserver *)observer callChanged:(CXCall *)call {
-    IBNUpdateCallVisibility(observer, call);
-}
-@end
-static void IBNStartCallMonitoring(void) {
-    if (IBNCallObserver) return;
-    IBNCallDelegate = [IBNCallStateDelegate new];
-    IBNCallObserver = [CXCallObserver new];
-    [IBNCallObserver setDelegate:IBNCallDelegate queue:dispatch_get_main_queue()];
-    IBNUpdateCallVisibility(IBNCallObserver, nil);
-}
-
+// Lock Screen measurements are retained only as fallback if system
+// aperture geometry is temporarily unavailable.
 static BOOL IBNUseExpandedOutline(void) {
-    return IBNLastDetectedLockScreen || IBNCountdownExpanded || IBNRecordingExpanded;
+    return IBNLastDetectedLockScreen;
 }
-static void IBNBeginRecordingCountdown(void) {
-    if (![NSThread isMainThread]) {
-        dispatch_async(dispatch_get_main_queue(), ^{ IBNBeginRecordingCountdown(); });
-        return;
-    }
-    // The same control can be invoked multiple times; don't unset an
-    // already-captured recording and never alter native ReplayKit operation.
-    if (UIScreen.mainScreen.isCaptured) return;
-    IBNCountdownExpanded = YES;
-    NSUInteger token = ++IBNCountdownToken;
-    IBNNeedsFullRedraw = YES;
-    IBNRefresh();
-    // A recording may be cancelled during the native 3-second countdown.
-    // If capture never starts, safely restore after a short grace period;
-    // a newer countdown or successful start invalidates this callback.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6.0 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        if (token != IBNCountdownToken || UIScreen.mainScreen.isCaptured) return;
-        IBNCountdownExpanded = NO;
-        IBNNeedsFullRedraw = YES;
-        IBNRefresh();
-    });
-}
-static void IBNUpdateScreenCaptureState(void) {
-    BOOL captured = UIScreen.mainScreen.isCaptured;
-    if (!IBNRecordingStateKnown) {
-        IBNRecordingStateKnown = YES;
-        IBNLastCaptured = captured;
-        IBNRecordingExpanded = captured;
-        return;
-    }
-    if (captured == IBNLastCaptured) return;
-    IBNLastCaptured = captured;
-    NSUInteger transition = ++IBNRecordingTransition;
-    if (captured) {
-        // Expand immediately once iOS confirms capture has started.
-        IBNRecordingExpanded = YES;
-        IBNRecordingStopIntermission = NO; // Cancel old post-stop blackout.
-        // Capture has started; recording state takes over from countdown.
-        IBNCountdownExpanded = NO;
-        ++IBNCountdownToken;
-        IBNNeedsFullRedraw = YES;
-        return;
-    }
-    // On stop, hide the arcs instantly for 5 seconds while iOS displays
-    // its own recording-saved banner. Geometry can safely return to the
-    // resting profile while hidden, so it reappears already aligned.
-    IBNRecordingStopIntermission = YES;
-    IBNRecordingExpanded = NO;
-    IBNNeedsFullRedraw = YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        if (transition != IBNRecordingTransition || UIScreen.mainScreen.isCaptured) return;
-        IBNRecordingStopIntermission = NO;
-        IBNNeedsFullRedraw = YES;
-        IBNRefresh();
-    });
-}
-
 static id IBNRead(NSString *key) {
     CFPropertyListRef p = CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)IBNDomain);
     return p ? CFBridgingRelease(p) : nil;
@@ -275,7 +146,7 @@ static UIColor *IBNColorFromHex(NSString *value, UIColor *fallback) {
 }
 static UIColor *IBNColorForPercent(NSInteger percent) {
     // While connected to power, charging colour always overrides percentage and manual/auto modes.
-    if (IBNPowerConnected && !IBNChargingIntermission)
+    if (IBNPowerConnected)
         return IBNColorFromHex(IBNChargingHex, UIColor.cyanColor);
     if (!IBNAutomaticColor) return IBNColorFromHex(IBNFixedHex, UIColor.systemGreenColor);
     if (percent <= 20) return [UIColor colorWithRed:1 green:69.0 / 255 blue:58.0 / 255 alpha:1];
@@ -288,21 +159,10 @@ static CGPathRef IBNHalfPath(CGRect r, BOOL left) {
     CGFloat radius = CGRectGetHeight(r) / 2.0;
     CGFloat centreX = CGRectGetMidX(r);
     CGFloat centreY = CGRectGetMidY(r);
-    // Tiny active-recording adjustment only: add another 0.25pt right-tip
-    // clearance vs v0.2.25 (0.75 -> 1.00pt total), keeping the curve
-    // outside the black Island. Preserve the 2pt expanded-stroke clearance,
-    // the left side and all other proven Lock Screen/countdown geometry.
-    CGFloat rightCapClearance = (!left && IBNRecordingExpanded &&
-                                !IBNLastDetectedLockScreen) ? 1.0 : 0.0;
-    CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r) + rightCapClearance;
+    CGFloat edgeX = left ? CGRectGetMinX(r) : CGRectGetMaxX(r);
     CGFloat arcX = left ? edgeX + radius : edgeX - radius;
     CGFloat sign = left ? -1.0 : 1.0;
-    // Expose a little more of the top green recording line above the black
-    // capsule, without shifting its bottom or either side. Leave radius,
-    // centreY, side control points and configured stroke width untouched.
-    CGFloat topLift = (IBNRecordingExpanded && !IBNLastDetectedLockScreen)
-                      ? IBNActiveRecordingTopLift : 0.0;
-    CGFloat top = CGRectGetMinY(r) - topLift;
+    CGFloat top = CGRectGetMinY(r);
     CGFloat bottom = CGRectGetMaxY(r);
     UIBezierPath *p = [UIBezierPath bezierPath];
     [p moveToPoint:CGPointMake(centreX, top)];
@@ -384,65 +244,21 @@ static BOOL IBNLockIconVisible(void) {
     }
     return NO;
 }
-static void IBNApplyNativeBorderState(void) {
-    // Existing v0.2.9 hook normally makes the native keyline transparent.
-    // Temporarily permit iOS's original keyline during the charging popup.
-    for (SBSystemApertureContainerView *view in [IBNApertureViews allObjects]) {
-        UIColor *original = objc_getAssociatedObject(view, &IBNOriginalNativeTintKey);
-        [view setKeyLineTintColor:(IBNEnabled && !IBNChargingIntermission)
-                                  ? UIColor.clearColor : original];
-    }
-}
-static void IBNUpdateChargingTransition(void) {
-    UIDeviceBatteryState batteryState = UIDevice.currentDevice.batteryState;
-    BOOL connected = batteryState == UIDeviceBatteryStateCharging ||
-                     batteryState == UIDeviceBatteryStateFull;
-    if (!IBNPowerStateKnown) {
-        IBNPowerStateKnown = YES;
+static void IBNUpdatePowerState(void) {
+    UIDeviceBatteryState state = UIDevice.currentDevice.batteryState;
+    BOOL connected = (state == UIDeviceBatteryStateCharging ||
+                      state == UIDeviceBatteryStateFull);
+    if (IBNPowerConnected != connected) {
         IBNPowerConnected = connected;
-        // Relaunch while plugged in: no fresh charging popup to wait for.
-        IBNChargingIntermission = NO;
-        return;
-    }
-    if (connected == IBNPowerConnected) return;
-    IBNPowerConnected = connected;
-    NSUInteger token = ++IBNPowerTransitionToken;
-    if (!connected) {
-        IBNChargingIntermission = NO;
         IBNNeedsFullRedraw = YES;
-        IBNApplyNativeBorderState();
-        return;
     }
-    // Hide native-app and fallback battery strokes IMMEDIATELY on plug-in.
-    IBNChargingIntermission = YES;
-    IBNNeedsFullRedraw = YES;
-    IBNApplyNativeBorderState();
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        if (token != IBNPowerTransitionToken || !IBNPowerConnected) return;
-        IBNChargingIntermission = NO;
-        IBNNeedsFullRedraw = YES;
-        IBNApplyNativeBorderState();
-        IBNRefresh();
-    });
 }
-static BOOL IBNRecordingOutlineProfile(void) {
-    return !IBNLastDetectedLockScreen && (IBNCountdownExpanded || IBNRecordingExpanded);
-}
-static BOOL IBNActiveRecordingOutlineProfile(void) {
-    // The red-dot profile is active only while capture is ongoing.
-    // After stopping, arcs are hidden for 5 seconds and return at rest size.
-    return !IBNLastDetectedLockScreen && IBNRecordingExpanded;
-}
+// Calibrated rest and Lock Screen sizes are fallbacks ONLY.
 static CGRect IBNPortraitIslandRect(CGFloat portraitWidth, BOOL expanded) {
-    BOOL countdownOrRecording = IBNRecordingOutlineProfile();
-    BOOL activeRecording = IBNActiveRecordingOutlineProfile();
-    CGFloat width = activeRecording ? IBNActiveRecordingWidth :
-                    (countdownOrRecording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth));
-    CGFloat height = activeRecording ? IBNActiveRecordingHeight : (expanded ? IBNLockHeight : IBNHeight);
-    CGFloat top = activeRecording ? IBNActiveRecordingTop : (expanded ? IBNLockTop : IBNTop);
-    CGFloat xOffset = activeRecording ? IBNActiveRecordingOffsetX :
-                      (countdownOrRecording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0));
+    CGFloat width = expanded ? IBNLockWidth : IBNWidth;
+    CGFloat height = expanded ? IBNLockHeight : IBNHeight;
+    CGFloat top = expanded ? IBNLockTop : IBNTop;
+    CGFloat xOffset = expanded ? IBNLockOffsetX : 0.0;
     return CGRectMake((portraitWidth - width) / 2.0 + xOffset, top, width, height);
 }
 static void IBNQueueLockRefresh(void) {
@@ -526,8 +342,7 @@ static void IBNRememberOriginalTint(SBSystemApertureContainerView *view, UIColor
     objc_setAssociatedObject(view, &IBNOriginalNativeTintKey, color, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-// Select only the line weight from charging state; shape, battery progress,
-// recording profile, right clearance and 5-second post-recording delay stay fixed.
+// Charging colour and line thickness change immediately.
 static CGFloat IBNCurrentThickness(void) {
     return IBNPowerConnected ? IBNChargingThickness : IBNThickness;
 }
@@ -563,16 +378,10 @@ static CGRect IBNNativeRect(UIWindow *window) {
     }
     if (w >= 100 && h >= 25 && h < 130) {
         BOOL expanded = IBNUseExpandedOutline();
-        BOOL countdownOrRecording = IBNRecordingOutlineProfile();
-        BOOL activeRecording = IBNActiveRecordingOutlineProfile();
-        CGFloat width = activeRecording ? IBNActiveRecordingWidth :
-                        (countdownOrRecording ? IBNRecordingWidth : (expanded ? IBNLockWidth : IBNWidth));
-        CGFloat height = activeRecording ? IBNActiveRecordingHeight : (expanded ? IBNLockHeight : IBNHeight);
-        CGFloat offset = activeRecording ? IBNActiveRecordingOffsetX :
-                         (countdownOrRecording ? IBNRecordingOffsetX : (expanded ? IBNLockOffsetX : 0));
-        // Reduce height only at the top, keeping the bottom edge steady.
-        CGFloat yOffset = activeRecording ? 0.75 : 0.0;
-        return CGRectMake((w - width)/2 + offset, (h - height)/2 + yOffset, width, height);
+        CGFloat width = expanded ? IBNLockWidth : IBNWidth;
+        CGFloat height = expanded ? IBNLockHeight : IBNHeight;
+        CGFloat offset = expanded ? IBNLockOffsetX : 0.0;
+        return CGRectMake((w - width)/2 + offset, (h - height)/2, width, height);
     }
     return CGRectNull;
 }
@@ -592,7 +401,7 @@ static void IBNRegisterAperture(SBSystemApertureContainerView *aperture) {
 static void IBNUpdateChargingPulse(CAShapeLayer *layer) {
     if (!layer) return;
     BOOL shouldPulse = IBNEnabled && IBNPulseCharging && IBNPowerConnected
-                       && !IBNChargingIntermission && !layer.hidden;
+                       && !layer.hidden;
     NSString *const key = @"IBNChargingPulse";
     if (!shouldPulse) {
         if ([layer animationForKey:key]) [layer removeAnimationForKey:key];
@@ -618,6 +427,10 @@ static BOOL IBNRenderSystemAperture(void) {
         NSArray<CAShapeLayer *> *pair = objc_getAssociatedObject(window, &IBNApertureLayersKey);
         BOOL visible = IBNVisibleAperture(aperture);
         CGRect rect = IBNNativeRect(window);
+        // All Island activities use the native capsule frame. Known-good
+        // resting/Lock Screen dimensions remain the fallback when unavailable.
+        CGRect candidate = IBNGeometryExpandedRect(aperture, window);
+        if (!CGRectIsNull(candidate)) rect = candidate;
         if (CGRectIsNull(rect)) visible = NO;
         if (!visible || !IBNEnabled || UIDevice.currentDevice.batteryLevel < 0) {
             for (CAShapeLayer *layer in pair) {
@@ -662,7 +475,7 @@ static BOOL IBNRenderSystemAperture(void) {
             // the bottom-centre end as the battery level decreases.
             layer.strokeStart = 0.0;
             layer.strokeEnd = progress;
-            layer.hidden = (percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive);
+            layer.hidden = (percent == 0);
             IBNUpdateChargingPulse(layer);
             // A later inserted native subview must not cover our arcs.
             if (layer.superlayer == window.layer && window.layer.sublayers.lastObject != layer) {
@@ -682,10 +495,8 @@ static void IBNRefresh(void) {
         dispatch_async(dispatch_get_main_queue(), ^{ IBNRefresh(); });
         return;
     }
-    IBNInstallCountdownHookIfAvailable();
-    IBNUpdateChargingTransition();
+    IBNUpdatePowerState();
     IBNLastDetectedLockScreen = IBNLockIconVisible();
-    IBNUpdateScreenCaptureState();
     IBNEnsureWindow();
     // The native aperture window is composited above foreground applications.
     IBNHasActiveSystemAperture = IBNRenderSystemAperture();
@@ -721,7 +532,7 @@ static void IBNRefresh(void) {
         || (IBNLastThickness != IBNCurrentThickness());
     BOOL colorChanged = IBNNeedsFullRedraw || !IBNLastColor || !CGColorEqualToColor(IBNLastColor, color.CGColor);
     if (!geomChanged && !colorChanged && IBNLastPercent == percent &&
-        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive)) return;
+        IBNLeft.hidden == (IBNHasActiveSystemAperture || percent == 0 )) return;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (geomChanged) {
@@ -756,8 +567,8 @@ static void IBNRefresh(void) {
     IBNRight.strokeStart = 0.0;
     IBNLeft.strokeEnd = progress;
     IBNRight.strokeEnd = progress;
-    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive;
-    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0 || IBNChargingIntermission || IBNRecordingStopIntermission || IBNCallActive;
+    IBNLeft.hidden = IBNHasActiveSystemAperture || percent == 0;
+    IBNRight.hidden = IBNHasActiveSystemAperture || percent == 0;
     IBNUpdateChargingPulse(IBNLeft);
     IBNUpdateChargingPulse(IBNRight);
     [CATransaction commit];
@@ -776,7 +587,7 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
         for (SBSystemApertureContainerView *view in [IBNApertureViews allObjects]) {
             // Restore the stock outline on disable; hide it while enabled.
             UIColor *original = objc_getAssociatedObject(view, &IBNOriginalNativeTintKey);
-            [view setKeyLineTintColor:(IBNEnabled && !IBNChargingIntermission)
+            [view setKeyLineTintColor:IBNEnabled
                                           ? UIColor.clearColor : original];
         }
         IBNRefresh();
@@ -785,40 +596,47 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
 %hook SpringBoard
 - (void)applicationDidFinishLaunching:(id)application {
     %orig(application);
-    dispatch_async(dispatch_get_main_queue(), ^{ IBNStartCallMonitoring(); IBNRefresh(); });
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{ IBNRefresh(); });
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{ IBNRefresh(); });
+    dispatch_async(dispatch_get_main_queue(), ^{ IBNRefresh(); });
 }
 %end
 %hook SBSystemApertureContainerView
+- (void)setFrame:(CGRect)frame {
+    CGRect before = self.frame;
+    %orig(frame);
+    // Catch frame transitions even if layoutSubviews doesn't run afterwards.
+    if (self.window && !CGRectEqualToRect(before, self.frame)) {
+        IBNRegisterAperture(self);
+        IBNGeometryApertureDidLayout(self);
+        IBNRefresh();
+    }
+}
 // Use the same native key-line selector as the user's existing working
 // Dynamic Island LS Color tweak, but keep the key-line transparent.
 - (void)setKeyLineTintColor:(UIColor *)color {
     IBNRememberOriginalTint(self, color);
-    %orig((IBNEnabled && !IBNChargingIntermission) ? UIColor.clearColor : color);
+    %orig(IBNEnabled ? UIColor.clearColor : color);
 }
 - (UIColor *)keyLineTintColor {
-    return (IBNEnabled && !IBNChargingIntermission) ? UIColor.clearColor : %orig;
+    return IBNEnabled ? UIColor.clearColor : %orig;
 }
 - (UIColor *)_validatedKeyLineTintColor {
-    return (IBNEnabled && !IBNChargingIntermission) ? UIColor.clearColor : %orig;
+    return IBNEnabled ? UIColor.clearColor : %orig;
 }
 - (void)_applySettingsValues {
     %orig;
-    if (IBNEnabled && !IBNChargingIntermission) [self setKeyLineTintColor:UIColor.clearColor];
+    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
 }
 - (void)didMoveToWindow {
     %orig;
     IBNRegisterAperture(self);
-    if (IBNEnabled && !IBNChargingIntermission) [self setKeyLineTintColor:UIColor.clearColor];
+    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
     IBNRefresh();
 }
 - (void)layoutSubviews {
     %orig;
     IBNRegisterAperture(self);
-    if (IBNEnabled && !IBNChargingIntermission) [self setKeyLineTintColor:UIColor.clearColor];
+    IBNGeometryApertureDidLayout(self); // Existing hooked layout/state transition.
+    if (IBNEnabled) [self setKeyLineTintColor:UIColor.clearColor];
     if (self.window) IBNRefresh();
 }
 %end
@@ -838,24 +656,7 @@ static void IBNPrefsChanged(CFNotificationCenterRef center, void *observer,
     IBNQueueLockRefresh();
 }
 %end
-// ReplayKitModule is a dynamically loaded Control Centre bundle. The
-// %group is installed only after confirming this selector actually exists,
-// so unsupported devices keep the safe UIKit capture-state behaviour.
-%group IBNCountdownHooks
-%hook RPControlCenterMenuModuleViewController
-- (void)sessionIsStarting {
-    %orig;
-    IBNBeginRecordingCountdown();
-}
-%end
-%end
-static void IBNInstallCountdownHookIfAvailable(void) {
-    if (IBNCountdownHookInstalled) return;
-    Class cls = objc_lookUpClass("RPControlCenterMenuModuleViewController");
-    if (!cls || !class_getInstanceMethod(cls, @selector(sessionIsStarting))) return;
-    IBNCountdownHookInstalled = YES;
-    %init(IBNCountdownHooks);
-}
+// Native capsule layout/frame hooks now handle activity changes.
 %ctor {
     @autoreleasepool {
         struct utsname info;
@@ -864,16 +665,10 @@ static void IBNInstallCountdownHookIfAvailable(void) {
         IBNLoadPreferences();
         IBNApertureViews = [NSHashTable weakObjectsHashTable];
         IBNLockViews = [NSHashTable weakObjectsHashTable];
+        IBNGeometryConfigure(^{ IBNRefresh(); });
         UIDevice.currentDevice.batteryMonitoringEnabled = YES;
         %init;
-        IBNInstallCountdownHookIfAvailable();
         NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
-        // ReplayKitModule is loaded lazily as Control Centre opens; hook it
-        // after its bundle loads, not at SpringBoard launch prematurely.
-        [nc addObserverForName:NSBundleDidLoadNotification object:nil
-                        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
-            IBNInstallCountdownHookIfAvailable();
-        }];
         for (NSString *name in @[ UIDeviceBatteryLevelDidChangeNotification,
                                    UIDeviceBatteryStateDidChangeNotification,
                                    UIScreenCapturedDidChangeNotification,
